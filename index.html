@@ -741,8 +741,8 @@ body.login-active { overflow: hidden; }
 <!-- トースト -->
 <div class="toast" id="toast"></div>
 
-<script src="./template.js"></script>
-<script src="./year_template.js"></script>
+<script src="./template.js?v=20260421-1"></script>
+<script src="./year_template.js?v=20260421-1"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
@@ -1130,24 +1130,28 @@ function bindLoginEvents() {
 const YOSHIWA_FIELDS = {
   WEEK_BASES: [1, 56, 111, 166, 221],
 
-  // 上段: 積算データ（E-I列=5日分、月〜金）
+  // 上段: 積算データ（D-I列=6日分、月〜金+翌週最初の点検日）
+  // 10項目は差分方式 (I-D)/日数、日放流流量のみ単純平均 AVERAGE(D:I)
+  // 日放流流量は祝日でも入力可能（翌日に前日分を入力する運用）
   upper_section: {
-    col_start: 5,  // E列
-    days: 5,
+    col_start: 4,  // D列
+    col_i: 9,      // I列 (翌週最初の点検日)
+    col_j: 10,     // J列 (平均)
+    days: 6,
     fields: [
       { id: "weekly_date",      row_offset: 2,  label: "日付",           unit: "-",    type: "date" },
       { id: "weather",          row_offset: 3,  label: "天候",           unit: "-",    type: "select", options: ["晴","曇","雨","雪"] },
-      { id: "electric_total",   row_offset: 4,  label: "全日電力量",     unit: "kWh",  type: "number", step: "1" },
-      { id: "electric_meter",   row_offset: 5,  label: "力測電力量",     unit: "kWh",  type: "number", step: "1" },
-      { id: "electric_reactive",row_offset: 6,  label: "無効電力量",     unit: "kvar", type: "number", step: "1" },
-      { id: "demand",           row_offset: 7,  label: "デマンド",       unit: "kW",   type: "number", step: "0.1" },
-      { id: "water_usage",      row_offset: 8,  label: "水道使用量",     unit: "㎥",   type: "number", step: "1" },
-      { id: "diesel_fuel",      row_offset: 9,  label: "軽油(残量)",     unit: "ℓ",    type: "number", step: "1" },
-      { id: "return_sludge_1",  row_offset: 10, label: "返送汚泥流量1",  unit: "㎥",   type: "number", step: "1" },
-      { id: "return_sludge_2",  row_offset: 11, label: "返送汚泥流量2",  unit: "㎥",   type: "number", step: "1" },
-      { id: "excess_sludge",    row_offset: 12, label: "余剰汚泥流量",   unit: "㎥",   type: "number", step: "1" },
-      { id: "discharge_total",  row_offset: 13, label: "積算放流流量",   unit: "㎥",   type: "number", step: "1" },
-      { id: "discharge_daily",  row_offset: 14, label: "日放流流量",     unit: "㎥",   type: "number", step: "1" }
+      { id: "electric_total",   row_offset: 4,  label: "全日電力量",     unit: "kWh",  type: "number", step: "1", cumulative: true },
+      { id: "electric_meter",   row_offset: 5,  label: "力測電力量",     unit: "kWh",  type: "number", step: "1", cumulative: true },
+      { id: "electric_reactive",row_offset: 6,  label: "無効電力量",     unit: "kvar", type: "number", step: "1", cumulative: true },
+      { id: "demand",           row_offset: 7,  label: "デマンド",       unit: "kW",   type: "number", step: "0.1", cumulative: true },
+      { id: "water_usage",      row_offset: 8,  label: "水道使用量",     unit: "㎥",   type: "number", step: "1", cumulative: true },
+      { id: "diesel_fuel",      row_offset: 9,  label: "軽油(残量)",     unit: "ℓ",    type: "number", step: "1", cumulative: true },
+      { id: "return_sludge_1",  row_offset: 10, label: "返送汚泥流量1",  unit: "㎥",   type: "number", step: "1", cumulative: true },
+      { id: "return_sludge_2",  row_offset: 11, label: "返送汚泥流量2",  unit: "㎥",   type: "number", step: "1", cumulative: true },
+      { id: "excess_sludge",    row_offset: 12, label: "余剰汚泥流量",   unit: "㎥",   type: "number", step: "1", cumulative: true },
+      { id: "discharge_total",  row_offset: 13, label: "積算放流流量",   unit: "㎥",   type: "number", step: "1", cumulative: true },
+      { id: "discharge_daily",  row_offset: 14, label: "日放流流量",     unit: "㎥",   type: "number", step: "1", average: true, allow_on_holiday: true }
     ]
   },
 
@@ -2451,6 +2455,12 @@ function setCell(ws, row, col, val) {
   const num = Number(val);
   if (!isNaN(num) && val !== "" && typeof val !== "boolean") {
     cell.value = num;
+    // テンプレートの書式が 0.000 等の場合に、入力通りの表示にするため General に変更
+    // ただし日付書式(m/d 等) や文字列書式は触らない
+    const currentFmt = cell.numFmt || '';
+    if (currentFmt.includes('0.') || currentFmt === '0.000' || currentFmt === '0.00') {
+      cell.numFmt = 'General';
+    }
   } else {
     cell.value = val;
   }
@@ -2559,6 +2569,70 @@ function clearWeeklySheetDayColumn(ws, weekBase, d) {
   }
 }
 
+// ===== 積算セクション 計算ヘルパー =====
+// 差分方式: (最後の値 - 最初の値) / 実カレンダー日数
+// 累積メーター値なので、週の起点と終点の差分から1日平均を算出
+function calcDifferentialAverage(values, dates) {
+  // values: [D,E,F,G,H,I] の値配列 (null/undefined/""=空)
+  // dates:  [D,E,F,G,H,I] の Date配列 (null=月外/休業日)
+  let firstIdx = -1, lastIdx = -1;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (v !== null && v !== undefined && v !== "" && !isNaN(Number(v))) {
+      if (firstIdx === -1) firstIdx = i;
+      lastIdx = i;
+    }
+  }
+  if (firstIdx === -1 || lastIdx === firstIdx) return null; // 入力1つ以下は計算不可
+
+  const startVal = Number(values[firstIdx]);
+  const endVal = Number(values[lastIdx]);
+  const startDate = dates[firstIdx];
+  const endDate = dates[lastIdx];
+  if (!startDate || !endDate) return null;
+
+  const days = Math.round((endDate - startDate) / 86400000); // 1日 = 86400000ms
+  if (days <= 0) return null;
+
+  return (endVal - startVal) / days;
+}
+
+// 平均方式: AVERAGE(D:I) - 空欄自動除外
+function calcSimpleAverage(values) {
+  const nums = [];
+  for (const v of values) {
+    if (v === null || v === undefined || v === "") continue;
+    const n = Number(v);
+    if (!isNaN(n)) nums.push(n);
+  }
+  if (nums.length === 0) return null;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+// Week N の I列値 = Week N+1 の最初の入力値と日付を返す
+// Week 5（index=4）や、翌週の月内日がない場合は null を返す
+function findNextWeekCheckAnchor(weekIdx, fieldId) {
+  if (weekIdx >= 4) return { value: null, date: null }; // Week 5 は翌月なのでI列なし
+
+  const nextWeekSlots = monthWeeks[weekIdx + 1];
+  const nextWeekData = yoshiwaData.weeks[weekIdx + 2]; // weeksは1始まり
+  if (!nextWeekSlots || !nextWeekData) return { value: null, date: null };
+
+  // Week N+1 の月〜金 (d=1..5) の最初の非空点検日
+  for (let d = 1; d <= 5; d++) {
+    const dateObj = nextWeekSlots[d];
+    if (!dateObj) continue;
+    const dayData = nextWeekData[d];
+    if (!dayData) continue;
+    const v = dayData[fieldId];
+    if (v !== null && v !== undefined && v !== "") {
+      return { value: v, date: dateObj };
+    }
+  }
+  return { value: null, date: null };
+}
+
+// ===== 水質週報シート 書込 =====
 function fillWaterWeeklySheet(wb) {
   const ws = wb.getWorksheet("水質週報");
   if (!ws) return;
@@ -2570,11 +2644,150 @@ function fillWaterWeeklySheet(wb) {
     const weekSlots = monthWeeks[w - 1];
     const weekData = yoshiwaData.weeks[w];
 
+    // ==================== 上段: 積算セクション (D-I 6列) ====================
+    // 各積算フィールドごとに:
+    //   1. D-H列 (月〜金): dayData を書き込み（祝日は allow_on_holiday に従う）
+    //   2. I列: Week N+1 の最初の点検日の値をコピー (Week 5 は空欄)
+    //   3. J列: cumulative なら差分計算値、average なら AVERAGE関数維持（アプリで数値書込）
+    upper.fields.forEach(f => {
+      if (f.skip_weekly || f.row_offset === undefined) return;
+      const row = weekBase + f.row_offset;
+
+      // ---- D-H列の書込 (月〜金) ----
+      // 日付ラベル (row_offset=2) は従来通り toExcelDate
+      if (f.id === "weekly_date") {
+        // 日付ヘッダーは D=月, E=火, F=水, G=木, H=金, I=翌週月
+        if (weekSlots) {
+          for (let d = 1; d <= 5; d++) {
+            const col = 3 + d; // d=1→D(4), d=2→E(5), ..., d=5→H(8)
+            const dateObj = weekSlots[d];
+            if (dateObj) {
+              const cell = ws.getCell(row, col);
+              cell.value = toExcelDate(dateObj);
+              // 書式はテンプレート側のものを尊重（「m月d日(aaa)」など）
+              // 列幅不足で ######## になる場合はテンプレート側で shrink_to_fit が効く
+            } else {
+              ws.getCell(row, col).value = null;
+            }
+          }
+          // I列: 翌週最初の点検日の日付
+          let iDate = null;
+          if (w < 5) {
+            const nextSlots = monthWeeks[w];
+            if (nextSlots) {
+              for (let d = 1; d <= 5; d++) {
+                if (nextSlots[d]) { iDate = nextSlots[d]; break; }
+              }
+            }
+          }
+          if (iDate) {
+            const cell = ws.getCell(row, 9);
+            cell.value = toExcelDate(iDate);
+            // 書式はテンプレート側のものを尊重
+          } else {
+            ws.getCell(row, 9).value = null;
+          }
+        }
+        return; // 日付ラベル処理終わり
+      }
+
+      // 天候 (row_offset=3) は D-H列のみ
+      if (f.id === "weather") {
+        if (weekSlots && weekData) {
+          for (let d = 1; d <= 5; d++) {
+            const col = 3 + d; // D-H
+            const dateObj = weekSlots[d];
+            const dayData = weekData[d];
+            if (dateObj && dayData) {
+              setCell(ws, row, col, dayData[f.id]);
+            } else {
+              ws.getCell(row, col).value = null;
+            }
+          }
+          ws.getCell(row, 9).value = null; // I列は天候なし
+        }
+        return;
+      }
+
+      // データフィールド (cumulative/average)
+      const values = [null, null, null, null, null, null]; // D,E,F,G,H,I
+      const dates  = [null, null, null, null, null, null];
+
+      // D-H (d=1..5) の値を収集
+      if (weekSlots && weekData) {
+        for (let d = 1; d <= 5; d++) {
+          const col = 3 + d; // D=4, E=5, F=6, G=7, H=8
+          const dateObj = weekSlots[d];
+          const dayData = weekData[d];
+          if (!dateObj) {
+            // 月外・休業日: allow_on_holiday=true なら dayData があれば書く
+            if (f.allow_on_holiday && dayData && dayData[f.id] !== undefined && dayData[f.id] !== null && dayData[f.id] !== "") {
+              const v = dayData[f.id];
+              setCell(ws, row, col, v);
+              values[d - 1] = v;
+              // 日付は weekSlots が null なので補完: 月第N週のd曜日を計算
+              // （簡易: allow_on_holidayなら値だけ書き、日数計算は別経路）
+            } else {
+              ws.getCell(row, col).value = null;
+            }
+            continue;
+          }
+          // 月内・平日
+          if (dayData && dayData[f.id] !== undefined && dayData[f.id] !== null && dayData[f.id] !== "") {
+            const v = dayData[f.id];
+            setCell(ws, row, col, v);
+            values[d - 1] = v;
+            dates[d - 1] = dateObj;
+          } else {
+            ws.getCell(row, col).value = null;
+          }
+        }
+      }
+
+      // I列: Week N+1 の最初の点検日の値
+      if (w < 5) {
+        const anchor = findNextWeekCheckAnchor(w - 1, f.id);
+        if (anchor.value !== null && anchor.date !== null) {
+          setCell(ws, row, 9, anchor.value);
+          values[5] = anchor.value;
+          dates[5] = anchor.date;
+        } else {
+          ws.getCell(row, 9).value = null;
+        }
+      } else {
+        ws.getCell(row, 9).value = null; // Week 5 は翌月なので I列空
+      }
+
+      // J列 (平均/計算結果)
+      if (f.cumulative) {
+        // 差分方式: アプリ側で計算して数値書込
+        const avg = calcDifferentialAverage(values, dates);
+        if (avg !== null && isFinite(avg)) {
+          const cell = ws.getCell(row, 10);
+          cell.value = Math.round(avg * 100) / 100; // 小数2桁に丸め
+        } else {
+          ws.getCell(row, 10).value = null;
+        }
+      }
+      // average 方式 (日放流流量): テンプレートの =IFERROR(AVERAGE(D:I),"") に任せる
+      // ただしもしテンプレートに関数がない場合に備えて数値計算も書き込む
+      if (f.average) {
+        const avg = calcSimpleAverage(values);
+        if (avg !== null && isFinite(avg)) {
+          const cell = ws.getCell(row, 10);
+          cell.value = Math.round(avg * 100) / 100;
+        }
+        // 関数がテンプレートにある場合はそれを優先したいが、上書きする形でOK
+        // （両方とも同じ値になるため）
+      }
+    });
+
+    // ==================== 下段: 測定セクション (E-I 5列、従来通り) ====================
     for (let d = 1; d <= 5; d++) {
       const dateObj = weekSlots ? weekSlots[d] : null;
       if (!dateObj) {
-        // 月外 or 休業日 → テンプレート固定値含む列全体をクリア
-        clearWeeklySheetDayColumn(ws, weekBase, d);
+        // 月外・休業日 → 該当列をクリア
+        clearWeeklySheetLowerDayColumn(ws, weekBase, d);
         continue;
       }
       if (!weekData) continue;
@@ -2582,20 +2795,6 @@ function fillWaterWeeklySheet(wb) {
       const dayData = weekData[d];
       if (!dayData) continue;
 
-      // 上段: 積算日付(row_offset=2)を日付セルとして書込、他は数値/文字列
-      upper.fields.forEach(f => {
-        if (f.skip_weekly || f.row_offset === undefined) return;
-        const row = weekBase + f.row_offset;
-        if (f.id === "weekly_date") {
-          const cell = ws.getCell(row, col);
-          cell.value = toExcelDate(dateObj);
-          cell.numFmt = cell.numFmt || 'm/d';
-        } else {
-          setCell(ws, row, col, dayData[f.id]);
-        }
-      });
-
-      // 下段: 測定日付も同様に書込
       lower.fields.forEach(f => {
         if (f.skip_weekly || f.row_offset === undefined) return;
         const row = weekBase + f.row_offset;
@@ -2608,6 +2807,20 @@ function fillWaterWeeklySheet(wb) {
         }
       });
     }
+
+    // ==================== 上段の月外・休業日クリア（D-I列、固定値含む） ====================
+    // 注: 外観・臭気はテンプレート側で固定値が入っているため、月外日はクリア必要
+    // ただし、上段フィールドは非fixed値なので、上記ループで既に null を書いている
+    // → 追加処理は不要だが、もし weekSlots 自体が null (月構成上ありえない) の場合の保険
+  }
+}
+
+// 下段(測定セクション)のみ1日分クリア (row_offset 16-49)
+function clearWeeklySheetLowerDayColumn(ws, weekBase, d) {
+  const col = 4 + d;
+  for (let rowOffset = 16; rowOffset <= 49; rowOffset++) {
+    const cell = ws.getCell(weekBase + rowOffset, col);
+    cell.value = null;
   }
 }
 

@@ -1,0 +1,23 @@
+# テンプレート元ファイル（base64埋込済みのためアプリには不要）
+*.xlsx
+
+# 仕様書・マニュアル類（公開しない）
+*.md
+
+# 参照用フォルダ（公開しない）
+shiwagi-ref/
+
+# OS 生成ファイル
+.DS_Store
+Thumbs.db
+
+# エディタ/IDE
+.vscode/
+.idea/
+.claude/
+
+# Node
+node_modules/
+
+# ログ
+*.log

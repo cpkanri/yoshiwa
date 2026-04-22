@@ -472,6 +472,32 @@ body.login-active { overflow: hidden; }
   50%     { box-shadow: 0 0 0 5px rgba(244,67,54,0); }
 }
 
+/* ===== 同期ボタン ===== */
+.sync-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.2;
+}
+.sync-btn:hover { background: rgba(255,255,255,0.25); }
+.sync-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sync-btn.synced {
+  background: rgba(76,175,80,0.4);
+  border-color: rgba(76,175,80,0.8);
+}
+.sync-btn.error {
+  background: rgba(244,67,54,0.4);
+  border-color: rgba(244,67,54,0.8);
+}
+
 /* ===== モーダル ===== */
 .modal-overlay {
   position: fixed;
@@ -636,6 +662,7 @@ body.login-active { overflow: hidden; }
   </div>
   <div class="user-info" id="userInfo">
     <span class="user-name" id="userName"></span>
+    <button type="button" class="sync-btn" id="btnSync" title="サーバーと同期">🔄 同期</button>
     <button type="button" class="storage-badge" id="btnStorageBadge" title="データ管理を開く">💾 <span id="storageBadgeText">--</span></button>
     <button type="button" class="logout-btn" id="btnLogout">ログアウト</button>
   </div>
@@ -763,6 +790,50 @@ const YOSHIWA_USERS = [
   { id: "sonoda", password: "cpyoshiwa", name: "園田" },
   { id: "yokota", password: "cpyoshiwa", name: "横田" }
 ];
+
+// ===== GAS 同期設定 =====
+// 吉和専用 Google Apps Script Webアプリ URL
+// SS_ID: 1qLpRuhlZZ00NEm1yqdVskFQXIePMK0gCbryYa8Q8QWA
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxyG8g6hSj_Q0mHBEJWMFH0xdWjeMtaN5a2AEl3BxWxzNNSAb_JQ7dPgdu9-rgaXtOP/exec';
+
+// fetch のタイムアウト付きラッパー
+async function fetchWithTimeout(url, options, timeoutMs) {
+  timeoutMs = timeoutMs || 20000;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, Object.assign({}, options, { signal: ctrl.signal }));
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// トークン付きURL生成
+function withToken(url) {
+  const t = getAuthToken && typeof getAuthToken === 'function' ? getAuthToken() : localStorage.getItem('yoshiwa_auth_token');
+  if (!t) return url;
+  const sep = url.indexOf('?') >= 0 ? '&' : '?';
+  return url + sep + 'token=' + encodeURIComponent(t);
+}
+
+// トークン付きボディ生成
+function withTokenBody(body) {
+  const t = getAuthToken && typeof getAuthToken === 'function' ? getAuthToken() : localStorage.getItem('yoshiwa_auth_token');
+  if (t && body && typeof body === 'object') body.token = t;
+  return body;
+}
+
+// GAS接続チェック
+async function pingGAS() {
+  try {
+    const res = await fetchWithTimeout(GAS_URL + '?action=ping', { method: 'GET' }, 8000);
+    const data = await res.json();
+    return data && data.status === 'ok';
+  } catch(e) {
+    return false;
+  }
+}
 
 // ===== ストレージ管理 =====
 // 柴木・上殿で発生した QuotaExceededError 予防のため、使用量可視化・エラーハンドリング・
@@ -1011,14 +1082,40 @@ function generateToken() {
   return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
 }
 async function doLogin(userId, password) {
-  // クライアント側ハードコード照合（柴木と同等のセキュリティレベル）
-  const user = YOSHIWA_USERS.find(u => u.id === userId && u.password === password);
-  if (!user) throw new Error("IDまたはパスワードが違います");
-  const expires = Date.now() + AUTH_TTL_MS;
-  setAuth(generateToken(), user.id, user.name || user.id, expires);
-  return { userId: user.id, userName: user.name || user.id, expires };
+  // まず GAS 経由でログイン試行
+  try {
+    const res = await fetchWithTimeout(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'login', userId: userId, password: password })
+    }, 15000);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (data.token) {
+      setAuth(data.token, data.userId, data.userName || data.userId, data.expires || (Date.now() + AUTH_TTL_MS));
+      return { userId: data.userId, userName: data.userName || data.userId, expires: data.expires };
+    }
+    throw new Error('ログインに失敗しました');
+  } catch (e) {
+    // GASがダウン/ネット切断時はクライアント側でフォールバック認証
+    // （オフライン時もアプリが使えるように）
+    console.warn('GASログイン失敗、クライアントフォールバック:', e.message);
+    const user = YOSHIWA_USERS.find(u => u.id === userId && u.password === password);
+    if (!user) throw new Error("IDまたはパスワードが違います");
+    const expires = Date.now() + AUTH_TTL_MS;
+    setAuth(generateToken(), user.id, user.name || user.id, expires);
+    return { userId: user.id, userName: user.name || user.id, expires };
+  }
 }
 async function doLogout() {
+  const t = localStorage.getItem('yoshiwa_auth_token');
+  if (t) {
+    try {
+      await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'logout', token: t })
+      }, 8000);
+    } catch (e) {}
+  }
   clearAuth();
 }
 function handleAuthFailure() {
@@ -1123,6 +1220,11 @@ function bindLoginEvents() {
     await doLogout();
     updateUserInfoUI();
     showLoginScreen();
+  });
+
+  const btnSync = document.getElementById('btnSync');
+  if (btnSync) btnSync.addEventListener('click', async () => {
+    await syncAll();
   });
 }
 
@@ -1479,6 +1581,197 @@ function findLastInspector() {
     }
   }
   return "";
+}
+
+// ===== GAS 同期機能 =====
+// 水質週報 (weeks) と 年報用データ (aeration, mlss_return) を GAS 経由で Spreadsheet と同期
+
+// サーバーへデータ送信（アップロード）
+async function uploadToServer() {
+  const month = yoshiwaData.targetMonth;
+  if (!month) throw new Error('対象年月が未設定です');
+
+  const results = { saved: 0 };
+
+  // 1. 水質週報データ（月内の全週）
+  if (yoshiwaData.weeks && Object.keys(yoshiwaData.weeks).length > 0) {
+    const res = await fetchWithTimeout(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify(withTokenBody({
+        action: 'saveAll',
+        month: month,
+        startDate: yoshiwaData.startDate || '',
+        weeks: yoshiwaData.weeks
+      }))
+    }, 20000);
+    const data = await res.json();
+    if (data.error) throw new Error('水質週報: ' + data.error);
+    results.saved += (data.saved || 0);
+  }
+
+  // 2. エアレーション運転時間（月単位）
+  const aerationKey = 'yoshiwa_aeration_' + month;
+  const aerationRaw = localStorage.getItem(aerationKey);
+  if (aerationRaw) {
+    try {
+      const aerationData = JSON.parse(aerationRaw);
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify(withTokenBody({
+          action: 'saveAeration',
+          month: month,
+          aeration: aerationData
+        }))
+      }, 15000);
+      const data = await res.json();
+      if (data.error) throw new Error('エアレーション: ' + data.error);
+      results.saved += (data.saved || 0);
+    } catch(e) {
+      if (e.message && e.message.indexOf('エアレーション') === 0) throw e;
+      // JSONパースエラー等は無視して次へ
+    }
+  }
+
+  // 3. 返送汚泥MLSS（月単位）
+  const mlssKey = 'yoshiwa_mlss_return_' + month;
+  const mlssRaw = localStorage.getItem(mlssKey);
+  if (mlssRaw) {
+    try {
+      const mlssData = JSON.parse(mlssRaw);
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify(withTokenBody({
+          action: 'saveMlssReturn',
+          month: month,
+          mlss_return: mlssData
+        }))
+      }, 15000);
+      const data = await res.json();
+      if (data.error) throw new Error('返送汚泥MLSS: ' + data.error);
+      results.saved += (data.saved || 0);
+    } catch(e) {
+      if (e.message && e.message.indexOf('返送汚泥') === 0) throw e;
+    }
+  }
+
+  return results;
+}
+
+// サーバーからデータ取得（ダウンロード）
+async function downloadFromServer(month) {
+  const url = withToken(GAS_URL + '?action=getAllData&month=' + encodeURIComponent(month));
+  const res = await fetchWithTimeout(url, { method: 'GET' }, 20000);
+  const data = await res.json();
+  if (data.authRequired) {
+    handleAuthFailure();
+    throw new Error('認証が切れました');
+  }
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// サーバーデータをローカルにマージ
+function mergeServerData(serverData) {
+  if (!serverData) return;
+  // 水質週報: server.water → yoshiwaData.weeks
+  if (serverData.water) {
+    Object.keys(serverData.water).forEach(function(week) {
+      const weekNum = parseInt(week);
+      if (isNaN(weekNum) || weekNum < 1 || weekNum > 5) return;
+      if (!yoshiwaData.weeks[weekNum]) yoshiwaData.weeks[weekNum] = {};
+      Object.keys(serverData.water[week]).forEach(function(day) {
+        const dayNum = parseInt(day);
+        if (isNaN(dayNum) || dayNum < 1 || dayNum > 5) return;
+        yoshiwaData.weeks[weekNum][dayNum] = serverData.water[week][day];
+      });
+    });
+  }
+  // startDate
+  if (serverData.startDate) {
+    yoshiwaData.startDate = serverData.startDate;
+  }
+  // エアレーション
+  if (serverData.aeration && yoshiwaData.targetMonth) {
+    const aerationMonthData = serverData.aeration[yoshiwaData.targetMonth];
+    if (aerationMonthData) {
+      const aerationKey = 'yoshiwa_aeration_' + yoshiwaData.targetMonth;
+      try {
+        safeSetItem(aerationKey, JSON.stringify(aerationMonthData));
+      } catch(e) { console.error('aeration merge failed:', e); }
+    }
+  }
+  // 返送汚泥MLSS
+  if (serverData.mlss_return && yoshiwaData.targetMonth) {
+    const mlssMonthData = serverData.mlss_return[yoshiwaData.targetMonth];
+    if (mlssMonthData) {
+      const mlssKey = 'yoshiwa_mlss_return_' + yoshiwaData.targetMonth;
+      try {
+        safeSetItem(mlssKey, JSON.stringify(mlssMonthData));
+      } catch(e) { console.error('mlss merge failed:', e); }
+    }
+  }
+}
+
+// 全同期（アップロード → ダウンロード）
+async function syncAll() {
+  const btn = document.getElementById('btnSync');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.remove('synced', 'error');
+    btn.textContent = '同期中...';
+  }
+
+  try {
+    // まずローカル保存
+    saveToStorage();
+
+    // 1. サーバーへアップロード
+    await uploadToServer();
+
+    // 2. サーバーからダウンロード（他端末の更新を取得）
+    const month = yoshiwaData.targetMonth;
+    if (month) {
+      const serverData = await downloadFromServer(month);
+      mergeServerData(serverData);
+      // ローカルに反映を保存
+      saveToStorage();
+      // 画面再描画
+      if (typeof loadDataToForm === 'function') loadDataToForm();
+      if (typeof renderStorageBadge === 'function') renderStorageBadge();
+    }
+
+    if (btn) {
+      btn.textContent = '✅ 同期済';
+      btn.classList.add('synced');
+      setTimeout(() => {
+        btn.textContent = '🔄 同期';
+        btn.classList.remove('synced');
+        btn.disabled = false;
+      }, 2000);
+    }
+    showToast('同期が完了しました');
+    return true;
+  } catch (e) {
+    console.error('sync error:', e);
+    if (btn) {
+      btn.textContent = '❌ エラー';
+      btn.classList.add('error');
+      setTimeout(() => {
+        btn.textContent = '🔄 同期';
+        btn.classList.remove('error');
+        btn.disabled = false;
+      }, 3000);
+    }
+    showToast('同期エラー: ' + (e.message || e), 'error');
+    return false;
+  }
+}
+
+// showToast が未定義の場合の簡易フォールバック
+if (typeof showToast === 'undefined') {
+  window.showToast = function(msg, type) {
+    alert(msg);
+  };
 }
 
 function loadFromStorage() {

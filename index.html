@@ -498,6 +498,49 @@ body.login-active { overflow: hidden; }
   border-color: rgba(244,67,54,0.8);
 }
 
+/* ===== 接続状態バッジ ===== */
+.conn-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.12);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: inherit;
+  line-height: 1.2;
+  user-select: none;
+}
+.conn-status.online {
+  background: rgba(76,175,80,0.3);
+  border-color: rgba(76,175,80,0.7);
+}
+.conn-status.offline {
+  background: rgba(244,67,54,0.35);
+  border-color: rgba(244,67,54,0.8);
+  animation: conn-pulse 2s infinite;
+}
+@keyframes conn-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(244,67,54,0.5); }
+  50%     { box-shadow: 0 0 0 4px rgba(244,67,54,0); }
+}
+/* オフライン警告バー（画面上部） */
+.offline-banner {
+  display: none;
+  background: #fff3e0;
+  border-bottom: 2px solid #ff9800;
+  color: #bf360c;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.offline-banner.visible { display: block; }
+
 /* ===== モーダル ===== */
 .modal-overlay {
   position: fixed;
@@ -662,55 +705,15 @@ body.login-active { overflow: hidden; }
   </div>
   <div class="user-info" id="userInfo">
     <span class="user-name" id="userName"></span>
-    <button type="button" class="sync-btn" id="btnSync" title="サーバーと同期">🔄 同期</button>
-    <button type="button" class="storage-badge" id="btnStorageBadge" title="データ管理を開く">💾 <span id="storageBadgeText">--</span></button>
+    <span class="conn-status" id="connStatus" title="接続状態">🟡 未接続</span>
+    <button type="button" class="sync-btn" id="btnSync" title="サーバーから最新データを取得">🔄 同期</button>
     <button type="button" class="logout-btn" id="btnLogout">ログアウト</button>
   </div>
 </header>
 
-<!-- データ管理モーダル -->
-<div class="modal-overlay" id="dataManagerOverlay">
-  <div class="modal-card">
-    <div class="modal-header">
-      <h3>💾 データ管理</h3>
-      <button type="button" class="modal-close" id="btnDataManagerClose">×</button>
-    </div>
-    <div class="modal-body">
-
-      <div class="modal-section">
-        <h4>ストレージ使用量</h4>
-        <div class="usage-bar-wrap"><div class="usage-bar" id="usageBar" style="width:0%"></div></div>
-        <div class="usage-text" id="usageText">計算中...</div>
-        <div class="usage-note">※ Android ブラウザは通常 5MB まで。他サイトと共有。</div>
-      </div>
-
-      <div class="modal-section">
-        <h4>月別データ（古い順）</h4>
-        <div id="monthDataList" style="max-height:240px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:6px;background:#fafbfc;"></div>
-        <button type="button" class="modal-btn danger" id="btnDeleteOldest" style="margin-top:10px;">🗑 最古のデータを1件削除</button>
-      </div>
-
-      <div class="modal-section">
-        <h4>バックアップ</h4>
-        <button type="button" class="modal-btn primary" id="btnExportData">📤 全データをJSONでダウンロード</button>
-        <button type="button" class="modal-btn" id="btnImportData">📥 JSONファイルから復元</button>
-        <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;">
-      </div>
-
-      <div class="modal-section">
-        <h4>自動削除設定</h4>
-        <div class="toggle-row">
-          <label for="chkAutoDelete">起動時に古いデータを自動削除する</label>
-          <input type="checkbox" id="chkAutoDelete">
-        </div>
-        <div class="usage-note">
-          水質週報: 1年以上前のデータを削除<br>
-          エアレーション・返送汚泥MLSS: 3年以上前のデータを削除（年報出力に使用）
-        </div>
-      </div>
-
-    </div>
-  </div>
+<!-- オフライン警告バナー -->
+<div class="offline-banner" id="offlineBanner">
+  ⚠️ オフラインです。データは端末に保存されますが、サーバー同期は行われません。接続回復後に「🔄 同期」を押してください。
 </div>
 
 <!-- メインタブ (週報 / 年報) -->
@@ -835,6 +838,58 @@ async function pingGAS() {
   }
 }
 
+// ===== 接続状態管理 =====
+let _connState = 'unknown'; // 'online' | 'offline' | 'unknown'
+
+function setConnectionStatus(online) {
+  _connState = online ? 'online' : 'offline';
+  const badge = document.getElementById('connStatus');
+  const banner = document.getElementById('offlineBanner');
+  if (badge) {
+    badge.classList.remove('online', 'offline');
+    if (online) {
+      badge.classList.add('online');
+      badge.textContent = '🟢 接続中';
+      badge.title = 'サーバーに接続されています';
+    } else {
+      badge.classList.add('offline');
+      badge.textContent = '🔴 オフライン';
+      badge.title = 'サーバーに接続できません';
+    }
+  }
+  if (banner) {
+    if (online) banner.classList.remove('visible');
+    else banner.classList.add('visible');
+  }
+}
+
+function getConnectionStatus() {
+  return _connState;
+}
+
+// 接続状態を定期確認（2分おき）& ブラウザのonline/offlineイベント監視
+async function checkConnection() {
+  // ブラウザがオフラインと言っているなら即座にオフライン判定
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    setConnectionStatus(false);
+    return false;
+  }
+  const ok = await pingGAS();
+  setConnectionStatus(ok);
+  return ok;
+}
+
+// ブラウザのoffline/onlineイベントを監視
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    // ネット復帰したらpingで確認
+    checkConnection();
+  });
+  window.addEventListener('offline', () => {
+    setConnectionStatus(false);
+  });
+}
+
 // ===== ストレージ管理 =====
 // 柴木・上殿で発生した QuotaExceededError 予防のため、使用量可視化・エラーハンドリング・
 // 月別データ管理・バックアップ・自動削除を提供する。
@@ -870,6 +925,7 @@ function getAllYoshiwaKeys() {
 
 function parseMonthKey(key) {
   // "yoshiwa_weekly_2026-04" → { type: "weekly", ym: "2026-04" }
+  // safeSetItem の容量超過時最古削除ロジックで使用
   const types = [
     { prefix: "yoshiwa_weekly_",      type: "weekly",     label: "水質週報" },
     { prefix: "yoshiwa_aeration_",    type: "aeration",   label: "エアレーション" },
@@ -884,11 +940,11 @@ function parseMonthKey(key) {
   return null;
 }
 
+// safeSetItem の容量超過時最古削除ロジックで使用
 function computeStorageUsage() {
   const keys = getAllYoshiwaKeys();
   let totalBytes = 0;
-  const byMonth = {}; // ym → { ym, bytes, items: [{type,label,key,bytes}] }
-  const misc = []; // その他（auth, settings 等）
+  const byMonth = {};
   keys.forEach(k => {
     const raw = localStorage.getItem(k) || "";
     const bytes = byteLength(k) + byteLength(raw);
@@ -898,76 +954,11 @@ function computeStorageUsage() {
       if (!byMonth[m.ym]) byMonth[m.ym] = { ym: m.ym, bytes: 0, items: [] };
       byMonth[m.ym].bytes += bytes;
       byMonth[m.ym].items.push({ ...m, bytes });
-    } else {
-      misc.push({ key: k, bytes });
     }
   });
   const months = Object.values(byMonth).sort((a, b) => a.ym.localeCompare(b.ym));
   const pct = Math.min(100, Math.round((totalBytes / STORAGE_QUOTA_BYTES) * 1000) / 10);
-  return { totalBytes, pct, months, misc, quotaBytes: STORAGE_QUOTA_BYTES };
-}
-
-function formatBytes(n) {
-  if (n < 1024) return n + "B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + "KB";
-  return (n / 1024 / 1024).toFixed(2) + "MB";
-}
-
-function storageUsageLevel(pct) {
-  if (pct >= STORAGE_DANGER_PCT) return "danger";
-  if (pct >= STORAGE_WARN_PCT) return "warn";
-  return "ok";
-}
-
-function renderStorageBadge() {
-  const txt = document.getElementById("storageBadgeText");
-  const btn = document.getElementById("btnStorageBadge");
-  if (!txt || !btn) return;
-  const u = computeStorageUsage();
-  txt.textContent = formatBytes(u.totalBytes) + " / " + formatBytes(u.quotaBytes) + " (" + u.pct + "%)";
-  btn.classList.remove("warn", "danger");
-  const level = storageUsageLevel(u.pct);
-  if (level === "warn") btn.classList.add("warn");
-  if (level === "danger") btn.classList.add("danger");
-}
-
-// 設定 (自動削除ON/OFF 等)
-function loadSettings() {
-  try {
-    const raw = localStorage.getItem(STORAGE_SETTINGS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch(e) {}
-  return { autoDeleteOnBoot: false };
-}
-function saveSettings(s) {
-  try { localStorage.setItem(STORAGE_SETTINGS_KEY, JSON.stringify(s)); } catch(e) {}
-}
-
-// 現在月(YYYY-MM)から months 月前の "YYYY-MM" を返す
-function monthsAgo(months) {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - months);
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
-}
-
-// 自動削除: 水質週報は12ヶ月以上前、年報用(エアレ/MLSS)は36ヶ月以上前
-function runAutoDeleteIfEnabled() {
-  const s = loadSettings();
-  if (!s || !s.autoDeleteOnBoot) return { deletedKeys: [] };
-  const cutoffWeekly = monthsAgo(12);
-  const cutoffAnnual = monthsAgo(36);
-  const deleted = [];
-  getAllYoshiwaKeys().forEach(k => {
-    const m = parseMonthKey(k);
-    if (!m) return;
-    if (m.type === "weekly" && m.ym < cutoffWeekly) {
-      localStorage.removeItem(k); deleted.push(k);
-    } else if ((m.type === "aeration" || m.type === "mlss_return") && m.ym < cutoffAnnual) {
-      localStorage.removeItem(k); deleted.push(k);
-    }
-  });
-  return { deletedKeys: deleted };
+  return { totalBytes, pct, months, quotaBytes: STORAGE_QUOTA_BYTES };
 }
 
 // QuotaExceededError 検知
@@ -980,6 +971,11 @@ function isQuotaError(err) {
          code === 22 || code === 1014;
 }
 
+// バッジ機能は削除されたが、既存の呼び出しを壊さないため no-op を定義
+function renderStorageBadge() { /* no-op: バッジ機能は廃止 */ }
+function openDataManager() { /* no-op: データ管理モーダルは廃止 */ }
+function closeDataManager() { /* no-op: データ管理モーダルは廃止 */ }
+
 // setItem ラッパー: Quota 時に最古データを1件削除してリトライ（最大3回）
 function safeSetItem(key, value) {
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -988,7 +984,6 @@ function safeSetItem(key, value) {
       return { ok: true, attempt };
     } catch(e) {
       if (!isQuotaError(e)) return { ok: false, error: e, attempt };
-      // 最古の月別データを削除してリトライ（現在月は触らない）
       const currentYm = yoshiwaData.targetMonth || "";
       const usage = computeStorageUsage();
       const victims = usage.months.filter(m => m.ym !== currentYm);
@@ -998,52 +993,6 @@ function safeSetItem(key, value) {
     }
   }
   return { ok: false, error: new Error("retry limit"), attempt: 4, quotaExhausted: true };
-}
-
-// データ削除
-function deleteMonthAllData(ym) {
-  ["yoshiwa_weekly_", "yoshiwa_aeration_", "yoshiwa_mlss_return_"].forEach(p => {
-    localStorage.removeItem(p + ym);
-  });
-  // メモリ上の annualData からも削除
-  if (annualData && annualData.aeration) delete annualData.aeration[ym];
-  if (annualData && annualData.mlssReturn) delete annualData.mlssReturn[ym];
-}
-
-// エクスポート: yoshiwa_* の全エントリを JSON でダウンロード（auth系は含めない）
-function exportAllStorage() {
-  const payload = { version: 1, exportedAt: new Date().toISOString(), data: {} };
-  getAllYoshiwaKeys().forEach(k => {
-    if (STORAGE_AUTH_KEYS_SET.has(k)) return; // 認証情報はバックアップ対象外
-    payload.data[k] = localStorage.getItem(k);
-  });
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  const ts = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
-  a.download = "yoshiwa_backup_" + ts + ".json";
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-// インポート: JSON から localStorage に復元
-async function importAllStorage(file) {
-  const text = await file.text();
-  let parsed;
-  try { parsed = JSON.parse(text); } catch(e) { throw new Error("JSON の読み込みに失敗しました"); }
-  if (!parsed || typeof parsed !== "object" || !parsed.data) {
-    throw new Error("バックアップファイルの形式が不正です");
-  }
-  const entries = Object.entries(parsed.data);
-  let ok = 0, failed = 0;
-  for (const [k, v] of entries) {
-    if (typeof k !== "string" || !k.startsWith(STORAGE_PREFIX)) { failed++; continue; }
-    if (STORAGE_AUTH_KEYS_SET.has(k)) continue; // 認証はインポートしない
-    const res = safeSetItem(k, String(v));
-    if (res.ok) ok++; else failed++;
-  }
-  return { ok, failed, total: entries.length };
 }
 
 // ===== 認証管理 =====
@@ -1093,13 +1042,14 @@ async function doLogin(userId, password) {
     if (data.error) throw new Error(data.error);
     if (data.token) {
       setAuth(data.token, data.userId, data.userName || data.userId, data.expires || (Date.now() + AUTH_TTL_MS));
+      setConnectionStatus(true);
       return { userId: data.userId, userName: data.userName || data.userId, expires: data.expires };
     }
     throw new Error('ログインに失敗しました');
   } catch (e) {
     // GASがダウン/ネット切断時はクライアント側でフォールバック認証
-    // （オフライン時もアプリが使えるように）
     console.warn('GASログイン失敗、クライアントフォールバック:', e.message);
+    setConnectionStatus(false);
     const user = YOSHIWA_USERS.find(u => u.id === userId && u.password === password);
     if (!user) throw new Error("IDまたはパスワードが違います");
     const expires = Date.now() + AUTH_TTL_MS;
@@ -1754,10 +1704,12 @@ async function syncAll() {
         btn.disabled = false;
       }, 2000);
     }
+    setConnectionStatus(true);
     showToast('同期が完了しました');
     return true;
   } catch (e) {
     console.error('sync error:', e);
+    setConnectionStatus(false);
     if (btn) {
       btn.textContent = '❌ エラー';
       btn.classList.add('error');
@@ -2569,134 +2521,6 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
-// ===== データ管理モーダル =====
-function openDataManager() {
-  renderDataManager();
-  const ov = document.getElementById("dataManagerOverlay");
-  if (ov) ov.classList.add("visible");
-}
-function closeDataManager() {
-  const ov = document.getElementById("dataManagerOverlay");
-  if (ov) ov.classList.remove("visible");
-}
-function renderDataManager() {
-  const usage = computeStorageUsage();
-  // 使用量バー
-  const bar = document.getElementById("usageBar");
-  const txt = document.getElementById("usageText");
-  if (bar) {
-    const pctCapped = Math.min(100, usage.pct);
-    bar.style.width = pctCapped + "%";
-    bar.classList.remove("warn", "danger");
-    const level = storageUsageLevel(usage.pct);
-    if (level === "warn") bar.classList.add("warn");
-    if (level === "danger") bar.classList.add("danger");
-  }
-  if (txt) {
-    const level = storageUsageLevel(usage.pct);
-    const msg = level === "danger" ? "⚠ 容量不足の恐れがあります"
-              : level === "warn"   ? "⚠ データが増えてきました"
-              : "正常";
-    txt.innerHTML = `${formatBytes(usage.totalBytes)} / ${formatBytes(usage.quotaBytes)} (${usage.pct}%) — <strong>${msg}</strong>`;
-  }
-  // 月別データ一覧
-  const list = document.getElementById("monthDataList");
-  if (list) {
-    if (usage.months.length === 0) {
-      list.innerHTML = `<div style="padding:16px;color:#888;text-align:center;">保存データはありません</div>`;
-    } else {
-      list.innerHTML = usage.months.map(m => {
-        const typesStr = m.items.map(it => it.label).join(" / ");
-        return `<div class="data-row">
-          <div class="label">${escapeHtml(m.ym)}<br><span style="font-size:11px;color:#888;">${escapeHtml(typesStr)}</span></div>
-          <div class="size">${formatBytes(m.bytes)}</div>
-          <button type="button" data-del-month="${escapeHtml(m.ym)}">削除</button>
-        </div>`;
-      }).join("");
-      list.querySelectorAll("[data-del-month]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const ym = btn.getAttribute("data-del-month");
-          if (!confirm(`${ym} のデータ（水質週報・エアレーション・返送汚泥MLSS）をすべて削除します。よろしいですか？`)) return;
-          deleteMonthAllData(ym);
-          showToast(`${ym} のデータを削除しました`);
-          renderDataManager();
-          renderStorageBadge();
-        });
-      });
-    }
-  }
-  // 自動削除チェックボックス
-  const chk = document.getElementById("chkAutoDelete");
-  if (chk) {
-    const s = loadSettings();
-    chk.checked = !!s.autoDeleteOnBoot;
-  }
-}
-function bindDataManagerEvents() {
-  if (window.__dataManagerBound) return;
-  window.__dataManagerBound = true;
-
-  const badge = document.getElementById("btnStorageBadge");
-  if (badge) badge.addEventListener("click", openDataManager);
-
-  const closeBtn = document.getElementById("btnDataManagerClose");
-  if (closeBtn) closeBtn.addEventListener("click", closeDataManager);
-
-  const ov = document.getElementById("dataManagerOverlay");
-  if (ov) ov.addEventListener("click", (e) => { if (e.target === ov) closeDataManager(); });
-
-  const btnOldest = document.getElementById("btnDeleteOldest");
-  if (btnOldest) btnOldest.addEventListener("click", () => {
-    const usage = computeStorageUsage();
-    const currentYm = yoshiwaData.targetMonth || "";
-    const victims = usage.months.filter(m => m.ym !== currentYm);
-    if (victims.length === 0) { showToast("削除できる古いデータはありません", "error"); return; }
-    const oldest = victims[0];
-    if (!confirm(`最古の ${oldest.ym} のデータ (${formatBytes(oldest.bytes)}) を削除します。よろしいですか？`)) return;
-    deleteMonthAllData(oldest.ym);
-    showToast(`${oldest.ym} のデータを削除しました`);
-    renderDataManager();
-    renderStorageBadge();
-  });
-
-  const btnExport = document.getElementById("btnExportData");
-  if (btnExport) btnExport.addEventListener("click", () => {
-    try {
-      exportAllStorage();
-      showToast("バックアップをダウンロードしました");
-    } catch(e) { showToast("エクスポートに失敗: " + (e.message || e), "error"); }
-  });
-
-  const btnImport = document.getElementById("btnImportData");
-  const fileInput = document.getElementById("importFileInput");
-  if (btnImport && fileInput) {
-    btnImport.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", async (e) => {
-      const file = e.target.files && e.target.files[0];
-      fileInput.value = "";
-      if (!file) return;
-      if (!confirm("JSONファイルからデータを復元します。同じキーのデータは上書きされます。続行しますか？")) return;
-      try {
-        const res = await importAllStorage(file);
-        showToast(`復元しました: 成功=${res.ok} / 失敗=${res.failed}`);
-        renderDataManager();
-        renderStorageBadge();
-        // 復元した内容を反映するためアプリを再読込
-        loadFromStorage();
-        loadAnnualFromStorage();
-        renderAll();
-      } catch(e) { showToast("インポート失敗: " + (e.message || e), "error"); }
-    });
-  }
-
-  const chk = document.getElementById("chkAutoDelete");
-  if (chk) chk.addEventListener("change", () => {
-    const s = loadSettings();
-    s.autoDeleteOnBoot = !!chk.checked;
-    saveSettings(s);
-    showToast(chk.checked ? "自動削除を有効にしました" : "自動削除を無効にしました");
-  });
-}
 
 // ===== トースト =====
 function showToast(msg, type) {
@@ -3424,12 +3248,30 @@ function bindEvents() {
     });
   });
 
-  document.getElementById("btnSave").addEventListener("click", () => {
-    if (saveToStorage()) {
-      markClean();
-      showToast("保存しました");
-    } else {
+  document.getElementById("btnSave").addEventListener("click", async () => {
+    const btnSave = document.getElementById("btnSave");
+    // 1. まずローカル保存
+    if (!saveToStorage()) {
       showToast("保存に失敗しました", "error");
+      return;
+    }
+    // 2. サーバーへ自動送信
+    btnSave.disabled = true;
+    const origText = btnSave.textContent;
+    btnSave.textContent = "送信中...";
+    try {
+      await uploadToServer();
+      markClean();
+      setConnectionStatus(true);
+      showToast("保存しました（サーバー同期完了）");
+    } catch (e) {
+      console.warn("サーバー同期失敗:", e);
+      markClean();
+      setConnectionStatus(false);
+      showToast("端末に保存しました（サーバー同期に失敗。後で再試行してください）", "warn");
+    } finally {
+      btnSave.textContent = origText;
+      btnSave.disabled = false;
     }
   });
 
@@ -3493,18 +3335,6 @@ async function continueInit() {
   hideLoginScreen();
   updateUserInfoUI();
 
-  // 起動時自動削除（設定ONの場合のみ）
-  try {
-    const autoRes = runAutoDeleteIfEnabled();
-    if (autoRes.deletedKeys.length > 0) {
-      console.info("自動削除:", autoRes.deletedKeys.length + "件", autoRes.deletedKeys);
-    }
-  } catch(e) { console.warn("自動削除失敗:", e); }
-
-  // データ管理モーダル等のイベントバインド（ログイン後に一度だけ）
-  bindDataManagerEvents();
-  renderStorageBadge();
-
   const storedMonth = localStorage.getItem("yoshiwa_current_month") || currentYearMonth();
   yoshiwaData.targetMonth = storedMonth;
   document.getElementById("targetMonth").value = storedMonth;
@@ -3531,6 +3361,12 @@ async function continueInit() {
     bindEvents();
   }
   renderAll();
+
+  // 接続状態を起動時にチェック & 2分おきに定期確認
+  checkConnection();
+  if (!window.__connCheckTimer) {
+    window.__connCheckTimer = setInterval(checkConnection, 2 * 60 * 1000);
+  }
 }
 
 init();

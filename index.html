@@ -763,7 +763,7 @@ body.login-active { overflow: hidden; }
 <div class="actions">
   <button type="button" class="btn-copy" id="btnCopy">前日コピー</button>
   <button type="button" class="btn-clear" id="btnClear">クリア</button>
-  <button type="button" class="btn-save" id="btnSave">保存</button>
+  <button type="button" class="btn-save" id="btnSave" title="現在のタブ・週のデータをサーバーに送信">保存</button>
   <button type="button" class="btn-excel" id="btnExcel">📥 月報Excel</button>
   <button type="button" class="btn-excel" id="btnYearExcel" style="background:#1a4f8a;display:none;">📊 年報Excel</button>
 </div>
@@ -1612,6 +1612,78 @@ async function uploadToServer() {
   return results;
 }
 
+// サーバーへデータ送信（現タブ・現週のみの軽量版）
+// 保存ボタンから呼ばれる。戻り値の scope でトースト表記に使う
+async function uploadCurrentOnly() {
+  const month = yoshiwaData.targetMonth;
+  if (!month) throw new Error('対象年月が未設定です');
+
+  const results = { saved: 0, scope: '' };
+
+  if (currentMain === 'weekly') {
+    results.scope = '第' + currentWeek + '週';
+    const weekData = (yoshiwaData.weeks || {})[currentWeek];
+    if (weekData && Object.keys(weekData).length > 0) {
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(withTokenBody({
+          action: 'saveWeek',
+          month: month,
+          week: String(currentWeek),
+          startDate: yoshiwaData.startDate || '',
+          days: weekData
+        }))
+      }, 15000);
+      const data = await res.json();
+      if (data.error) throw new Error('水質週報: ' + data.error);
+      results.saved += (data.saved || 0);
+    }
+  } else if (currentMain === 'annual') {
+    if (currentAnnualSub === 'aeration') {
+      results.scope = 'エアレーション';
+      const aerationKey = 'yoshiwa_aeration_' + month;
+      const aerationRaw = localStorage.getItem(aerationKey);
+      if (aerationRaw) {
+        const aerationData = JSON.parse(aerationRaw);
+        const res = await fetchWithTimeout(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(withTokenBody({
+            action: 'saveAeration',
+            month: month,
+            aeration: aerationData
+          }))
+        }, 15000);
+        const data = await res.json();
+        if (data.error) throw new Error('エアレーション: ' + data.error);
+        results.saved += (data.saved || 0);
+      }
+    } else if (currentAnnualSub === 'mlss_return') {
+      results.scope = '返送汚泥MLSS';
+      const mlssKey = 'yoshiwa_mlss_return_' + month;
+      const mlssRaw = localStorage.getItem(mlssKey);
+      if (mlssRaw) {
+        const mlssData = JSON.parse(mlssRaw);
+        const res = await fetchWithTimeout(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(withTokenBody({
+            action: 'saveMlssReturn',
+            month: month,
+            mlss_return: mlssData
+          }))
+        }, 15000);
+        const data = await res.json();
+        if (data.error) throw new Error('返送汚泥MLSS: ' + data.error);
+        results.saved += (data.saved || 0);
+      }
+    }
+  }
+
+  return results;
+}
+
 // サーバーからデータ取得（ダウンロード）
 async function downloadFromServer(month) {
   const url = withToken(GAS_URL + '?action=getAllData&month=' + encodeURIComponent(month));
@@ -1625,9 +1697,11 @@ async function downloadFromServer(month) {
   return data;
 }
 
-// サーバーデータをローカルにマージ
+// サーバーデータをローカルにマージ。何が更新されたかを返す
 function mergeServerData(serverData) {
-  if (!serverData) return;
+  const summary = { water_days: 0, aeration: false, mlss_return: false };
+  if (!serverData) return summary;
+
   // 水質週報: server.water → yoshiwaData.weeks
   if (serverData.water) {
     Object.keys(serverData.water).forEach(function(week) {
@@ -1638,6 +1712,7 @@ function mergeServerData(serverData) {
         const dayNum = parseInt(day);
         if (isNaN(dayNum) || dayNum < 1 || dayNum > 5) return;
         yoshiwaData.weeks[weekNum][dayNum] = serverData.water[week][day];
+        summary.water_days++;
       });
     });
   }
@@ -1652,6 +1727,7 @@ function mergeServerData(serverData) {
       const aerationKey = 'yoshiwa_aeration_' + yoshiwaData.targetMonth;
       try {
         safeSetItem(aerationKey, JSON.stringify(aerationMonthData));
+        summary.aeration = true;
       } catch(e) { console.error('aeration merge failed:', e); }
     }
   }
@@ -1662,41 +1738,52 @@ function mergeServerData(serverData) {
       const mlssKey = 'yoshiwa_mlss_return_' + yoshiwaData.targetMonth;
       try {
         safeSetItem(mlssKey, JSON.stringify(mlssMonthData));
+        summary.mlss_return = true;
       } catch(e) { console.error('mlss merge failed:', e); }
     }
   }
+  return summary;
 }
 
-// 全同期（アップロード → ダウンロード）
+// 同期ボタン: サーバーから最新データをダウンロードして反映
 async function syncAll() {
   const btn = document.getElementById('btnSync');
+
+  // 未保存データがある場合は警告
+  if (typeof isDirty !== 'undefined' && isDirty) {
+    const ok = confirm(
+      '未保存のデータがあります。\n\n' +
+      '同期するとサーバーのデータで上書きされ、未保存分は失われる可能性があります。\n\n' +
+      '続行しますか？\n\n' +
+      '（中止 → 先に「保存」ボタンを押してから「同期」してください）'
+    );
+    if (!ok) return false;
+  }
+
   if (btn) {
     btn.disabled = true;
     btn.classList.remove('synced', 'error');
-    btn.textContent = '同期中...';
+    btn.textContent = '取得中...';
   }
 
   try {
-    // まずローカル保存
+    // 現在のフォーム入力をローカルに確定（未確定入力の保護）
     saveToStorage();
 
-    // 1. サーバーへアップロード
-    await uploadToServer();
-
-    // 2. サーバーからダウンロード（他端末の更新を取得）
     const month = yoshiwaData.targetMonth;
-    if (month) {
-      const serverData = await downloadFromServer(month);
-      mergeServerData(serverData);
-      // ローカルに反映を保存
-      saveToStorage();
-      // 画面再描画
-      if (typeof loadDataToForm === 'function') loadDataToForm();
-      if (typeof renderStorageBadge === 'function') renderStorageBadge();
-    }
+    if (!month) throw new Error('対象年月が未設定です');
+
+    // サーバーからダウンロードしてマージ
+    const serverData = await downloadFromServer(month);
+    const summary = mergeServerData(serverData);
+    saveToStorage();
+
+    // 画面再描画
+    if (typeof loadDataToForm === 'function') loadDataToForm();
+    if (typeof renderStorageBadge === 'function') renderStorageBadge();
 
     if (btn) {
-      btn.textContent = '✅ 同期済';
+      btn.textContent = '✅ 取得済';
       btn.classList.add('synced');
       setTimeout(() => {
         btn.textContent = '🔄 同期';
@@ -1705,7 +1792,15 @@ async function syncAll() {
       }, 2000);
     }
     setConnectionStatus(true);
-    showToast('同期が完了しました');
+
+    // 取得内容の詳細トースト
+    const parts = [];
+    if (summary.water_days > 0) parts.push('水質' + summary.water_days + '日分');
+    if (summary.aeration) parts.push('エアレーション');
+    if (summary.mlss_return) parts.push('返送汚泥MLSS');
+    const detail = parts.length > 0 ? '（' + parts.join('、') + 'を更新）' : '（更新なし）';
+    showToast('サーバーから最新データを取得しました' + detail);
+
     return true;
   } catch (e) {
     console.error('sync error:', e);
@@ -3250,25 +3345,38 @@ function bindEvents() {
 
   document.getElementById("btnSave").addEventListener("click", async () => {
     const btnSave = document.getElementById("btnSave");
-    // 1. まずローカル保存
+
+    // 1. スコープ文字列を先に決定（エラー時のトースト用）
+    let scope = '';
+    if (currentMain === 'weekly') {
+      scope = '第' + currentWeek + '週';
+    } else if (currentMain === 'annual') {
+      scope = currentAnnualSub === 'aeration' ? 'エアレーション' : '返送汚泥MLSS';
+    }
+
+    // 2. ローカル保存
     if (!saveToStorage()) {
       showToast("保存に失敗しました", "error");
       return;
     }
-    // 2. サーバーへ自動送信
+
+    // 3. サーバーへアップロード
     btnSave.disabled = true;
     const origText = btnSave.textContent;
     btnSave.textContent = "送信中...";
     try {
-      await uploadToServer();
+      await uploadCurrentOnly();
       markClean();
       setConnectionStatus(true);
-      showToast("保存しました（サーバー同期完了）");
+      showToast(scope + "を保存しました（サーバーへ送信完了）");
     } catch (e) {
-      console.warn("サーバー同期失敗:", e);
+      console.warn("サーバー送信失敗:", e);
       markClean();
       setConnectionStatus(false);
-      showToast("端末に保存しました（サーバー同期に失敗。後で再試行してください）", "warn");
+      showToast(
+        "端末に" + scope + "を保存しました。サーバー送信失敗：" + (e.message || 'ネットワークエラー') + "（後で同期してください）",
+        "warn"
+      );
     } finally {
       btnSave.textContent = origText;
       btnSave.disabled = false;

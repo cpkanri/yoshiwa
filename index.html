@@ -2022,6 +2022,82 @@ function loadDataToForm() {
   }
 }
 
+// ===== オートアドバンス機能 =====
+
+// 現在のフォーム上のフォーカス可能なフィールドリストを順番に取得
+function getAdvanceableFields() {
+  return Array.from(document.querySelectorAll('#formWrap input[data-field], #formWrap select[data-field]'));
+}
+
+// 指定要素を画面の上から1/3位置にスクロール
+function scrollToTopThird(el) {
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const targetY = viewportHeight / 3;
+  const currentY = rect.top;
+  const scrollBy = currentY - targetY;
+  window.scrollBy({ top: scrollBy, left: 0, behavior: 'smooth' });
+}
+
+// 次のフィールドに進む
+// currentSection が upper で最後まで行ったら lower に切替
+function advanceToNextField(currentEl) {
+  const fields = getAdvanceableFields();
+  const idx = fields.indexOf(currentEl);
+  if (idx < 0) return;
+
+  const next = fields[idx + 1];
+  if (next) {
+    // 同じセクション内で次のフィールドがある
+    next.focus();
+    // select はフォーカスしても開かないので、少し遅延してスクロール
+    setTimeout(() => scrollToTopThird(next), 50);
+    // number / text の場合、既存値を全選択しておくと上書きしやすい
+    if (next.tagName === 'INPUT' && (next.type === 'number' || next.type === 'text')) {
+      try { next.select(); } catch(e) {}
+    }
+  } else {
+    // 最後のフィールドに到達
+    if (currentSection === 'upper') {
+      // upper の最後 → lower に切替
+      switchSectionAndFocusFirst('lower');
+    }
+    // lower の最後はそのまま停止（完了）
+    currentEl.blur();
+  }
+}
+
+// セクション切替＋最初のフィールドにフォーカス
+function switchSectionAndFocusFirst(targetSection) {
+  saveCurrentFormToData();
+  currentSection = targetSection;
+
+  // セクション切替ボタン（data-sec）のactive状態を更新
+  document.querySelectorAll('[data-sec]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sec === currentSection);
+  });
+
+  // フォーム再描画
+  if (typeof renderForm === 'function') {
+    renderForm();
+  } else if (typeof renderAll === 'function') {
+    renderAll();
+  }
+
+  // 少し待ってから最初のフィールドにフォーカス（DOM更新待ち）
+  setTimeout(() => {
+    const first = document.querySelector('#formWrap input[data-field], #formWrap select[data-field]');
+    if (first) {
+      first.focus();
+      setTimeout(() => scrollToTopThird(first), 50);
+      if (first.tagName === 'INPUT' && (first.type === 'number' || first.type === 'text')) {
+        try { first.select(); } catch(e) {}
+      }
+    }
+  }, 100);
+}
+
 function markDirty() {
   isDirty = true;
   const btn = document.getElementById("btnSave");
@@ -2189,10 +2265,24 @@ function renderForm() {
   wrap.querySelectorAll("input[data-field]").forEach(el => {
     el.addEventListener("input", () => markDirty());
     el.addEventListener("change", () => markDirty());
+    // Enterキーで次のフィールドへオートアドバンス
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        advanceToNextField(el);
+      }
+    });
   });
   // ドロップダウン（天候など）
-  wrap.querySelectorAll(".dropdown-select").forEach(sel => {
+  wrap.querySelectorAll("select[data-field]").forEach(sel => {
     sel.addEventListener("change", () => markDirty());
+    // selectでもEnterで次へ進めるように
+    sel.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        advanceToNextField(sel);
+      }
+    });
   });
   wrap.querySelectorAll(".toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => {

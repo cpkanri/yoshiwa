@@ -1841,12 +1841,28 @@ function loadFromStorage() {
 function saveFormToData() {
   const cell = yoshiwaData.weeks[currentWeek][currentDay];
   if (!cell) return;
+  // 現在表示中のセクションに属するフィールドIDの集合を作る
+  const fields = currentSection === "upper"
+    ? YOSHIWA_FIELDS.upper_section.fields
+    : YOSHIWA_FIELDS.lower_section.fields;
+  const visibleFieldIds = new Set(fields.map(f => f.id));
+
+  // DOM 上の全 [data-field] 要素をループ。ただし現在セクション外のフィールドは書き換えない
   document.querySelectorAll("[data-field]").forEach(el => {
     const key = el.dataset.field;
+    // 現在セクションのフィールドでなければスキップ（値を保持）
+    if (!visibleFieldIds.has(key)) return;
+
     if (el.tagName === "BUTTON" && el.classList.contains("toggle-btn")) {
       cell[key] = el.dataset.val || null;
     } else if (el.type === "number") {
-      cell[key] = el.value === "" ? null : el.value;
+      // 数値型は Number に変換（空文字は null）
+      if (el.value === "") {
+        cell[key] = null;
+      } else {
+        const num = Number(el.value);
+        cell[key] = isNaN(num) ? el.value : num;
+      }
     } else if (el.type === "date") {
       cell[key] = el.value || null;
     } else {
@@ -1858,8 +1874,16 @@ function saveFormToData() {
 function loadDataToForm() {
   const cell = yoshiwaData.weeks[currentWeek][currentDay];
   if (!cell) return;
+  const fields = currentSection === "upper"
+    ? YOSHIWA_FIELDS.upper_section.fields
+    : YOSHIWA_FIELDS.lower_section.fields;
+  const visibleFieldIds = new Set(fields.map(f => f.id));
+
   document.querySelectorAll("[data-field]").forEach(el => {
     const key = el.dataset.field;
+    // 現在セクションのフィールドのみ読み込み
+    if (!visibleFieldIds.has(key)) return;
+
     const v = cell[key];
     if (el.tagName === "BUTTON" && el.classList.contains("toggle-btn")) {
       const val = (v === null || v === undefined) ? "" : String(v);
@@ -1870,7 +1894,7 @@ function loadDataToForm() {
     }
   });
 
-  // 測定者デフォルト補完
+  // 測定者デフォルト補完（lower セクション時のみ意味がある）
   const inspEl = document.querySelector('[data-field="inspector"]');
   if (inspEl && !inspEl.value) {
     const last = localStorage.getItem("yoshiwa_last_inspector") || "";

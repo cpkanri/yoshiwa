@@ -1,10 +1,12 @@
 // 吉和水質管理センター 週報 Service Worker
-const CACHE_NAME = 'yoshiwa-v2';
+// v3: 積算セクション D-I 6列対応のためキャッシュ刷新
+const CACHE_NAME = 'yoshiwa-v3';
+const APP_VERSION = '20260421-1';
 const ASSETS = [
   './',
-  './index.html',
-  './template.js',
-  './year_template.js',
+  './index.html?v=' + APP_VERSION,
+  './template.js?v=' + APP_VERSION,
+  './year_template.js?v=' + APP_VERSION,
   './manifest.json',
   './icon-192.png',
   './icon-512.png'

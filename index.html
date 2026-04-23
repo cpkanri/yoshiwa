@@ -255,6 +255,24 @@ header h1 {
 .toggle-btn[data-val="雨"] { background: #e3f2fd; color: #1565c0; border-color: #90caf9; }
 .toggle-btn[data-val="雪"] { background: #f3e5f5; color: #6a1b9a; border-color: #ce93d8; }
 
+/* ドロップダウン天候選択 */
+.dropdown-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: menulist;
+}
+.dropdown-select:focus {
+  outline: none;
+  border-color: #1a4f8a;
+  box-shadow: 0 0 0 3px rgba(26,79,138,0.15);
+}
+
 /* ===== 操作ボタン ===== */
 .actions {
   position: fixed;
@@ -1214,7 +1232,7 @@ const YOSHIWA_FIELDS = {
     days: 6,
     fields: [
       { id: "weekly_date",      row_offset: 2,  label: "日付",           unit: "-",    type: "date" },
-      { id: "weather",          row_offset: 3,  label: "天候",           unit: "-",    type: "select", options: ["晴","曇","雨","雪"] },
+      { id: "weather",          row_offset: 3,  label: "天候",           unit: "-",    type: "select_dropdown", options: ["晴","曇","雨","雪","晴/曇","晴/雨","曇/雨","雨/雪"] },
       { id: "electric_total",   row_offset: 4,  label: "全日電力量",     unit: "kWh",  type: "number", step: "1", cumulative: true },
       { id: "electric_meter",   row_offset: 5,  label: "力測電力量",     unit: "kWh",  type: "number", step: "1", cumulative: true },
       { id: "electric_reactive",row_offset: 6,  label: "無効電力量",     unit: "kvar", type: "number", step: "1", cumulative: true },
@@ -1936,6 +1954,10 @@ function saveFormToData() {
     // 現在セクションのフィールドでなければスキップ（値を保持）
     if (!visibleFieldIds.has(key)) return;
 
+    if (el.tagName === "SELECT") {
+      cell[key] = el.value || null;
+      return;
+    }
     if (el.tagName === "BUTTON" && el.classList.contains("toggle-btn")) {
       cell[key] = el.dataset.val || null;
     } else if (el.type === "number") {
@@ -1952,6 +1974,14 @@ function saveFormToData() {
       cell[key] = el.value;
     }
   });
+
+  // タブで選択されている日付を weekly_date / measure_date に自動セット
+  const actualDate = getDateForDay(currentWeek, currentDay);
+  if (actualDate) {
+    const dateStr = formatDateKey(actualDate);
+    cell.weekly_date = dateStr;
+    cell.measure_date = dateStr;
+  }
 }
 
 function loadDataToForm() {
@@ -1968,6 +1998,10 @@ function loadDataToForm() {
     if (!visibleFieldIds.has(key)) return;
 
     const v = cell[key];
+    if (el.tagName === "SELECT") {
+      el.value = (v === null || v === undefined) ? "" : String(v);
+      return;
+    }
     if (el.tagName === "BUTTON" && el.classList.contains("toggle-btn")) {
       const val = (v === null || v === undefined) ? "" : String(v);
       el.dataset.val = val;
@@ -2123,6 +2157,8 @@ function renderForm() {
   groupOrder.forEach(cat => {
     html += `<div class="section"><div class="section-header">${escapeHtml(cat)}</div>`;
     groups[cat].forEach(f => {
+      // 水質週報では日付はタブで自動選択されるため、weekly_date / measure_date は非表示
+      if (f.id === "weekly_date" || f.id === "measure_date") return;
       html += `<div class="field"><span class="label">${escapeHtml(f.label)}</span><span class="unit">${escapeHtml(f.unit || "")}</span>`;
       if (f.type === "number") {
         html += `<input type="number" inputmode="decimal" step="${f.step || "1"}" data-field="${f.id}">`;
@@ -2133,6 +2169,14 @@ function renderForm() {
       } else if (f.type === "select") {
         const opts = JSON.stringify(f.options || []).replace(/"/g, '&quot;');
         html += `<button type="button" class="toggle-btn" data-field="${f.id}" data-options="${opts}">―</button>`;
+      } else if (f.type === "select_dropdown") {
+        const options = f.options || [];
+        let selectHtml = `<select class="dropdown-select" data-field="${f.id}"><option value="">―</option>`;
+        options.forEach(opt => {
+          selectHtml += `<option value="${opt}">${opt}</option>`;
+        });
+        selectHtml += `</select>`;
+        html += selectHtml;
       }
       html += `</div>`;
     });
@@ -2145,6 +2189,10 @@ function renderForm() {
   wrap.querySelectorAll("input[data-field]").forEach(el => {
     el.addEventListener("input", () => markDirty());
     el.addEventListener("change", () => markDirty());
+  });
+  // ドロップダウン（天候など）
+  wrap.querySelectorAll(".dropdown-select").forEach(sel => {
+    sel.addEventListener("change", () => markDirty());
   });
   wrap.querySelectorAll(".toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => {

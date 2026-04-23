@@ -498,6 +498,22 @@ body.login-active { overflow: hidden; }
   border-color: rgba(244,67,54,0.8);
 }
 
+/* 強制更新ボタン（sync-btn と同じ見た目だが色だけ変える） */
+#btnForceRefresh {
+  background: rgba(255,180,80,0.25);
+}
+#btnForceRefresh:hover {
+  background: rgba(255,180,80,0.4);
+}
+#btnForceRefresh.refreshing {
+  background: rgba(255,180,80,0.6);
+  animation: pulse-refresh 1s infinite;
+}
+@keyframes pulse-refresh {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 /* ===== 接続状態バッジ ===== */
 .conn-status {
   display: inline-flex;
@@ -707,6 +723,7 @@ body.login-active { overflow: hidden; }
     <span class="user-name" id="userName"></span>
     <span class="conn-status" id="connStatus" title="接続状態">🟡 未接続</span>
     <button type="button" class="sync-btn" id="btnSync" title="サーバーから最新データを取得">🔄 同期</button>
+    <button type="button" class="sync-btn" id="btnForceRefresh" title="アプリを最新版に更新（キャッシュクリア）">⟳ 更新</button>
     <button type="button" class="logout-btn" id="btnLogout">ログアウト</button>
   </div>
 </header>
@@ -1178,6 +1195,9 @@ function bindLoginEvents() {
   if (btnSync) btnSync.addEventListener('click', async () => {
     await syncAll();
   });
+
+  const btnForceRefresh = document.getElementById('btnForceRefresh');
+  if (btnForceRefresh) btnForceRefresh.addEventListener('click', forceRefresh);
 }
 
 // ===== 吉和フィールド定義（仕様書 2-2 準拠） =====
@@ -1816,6 +1836,69 @@ async function syncAll() {
     }
     showToast('同期エラー: ' + (e.message || e), 'error');
     return false;
+  }
+}
+
+// ===== 強制更新（キャッシュクリア + リロード）=====
+async function forceRefresh() {
+  const btn = document.getElementById('btnForceRefresh');
+
+  // 未保存データがあれば警告
+  if (typeof isDirty !== 'undefined' && isDirty) {
+    alert(
+      '未保存のデータがあります。\n\n' +
+      '先に「保存」ボタンを押してからアプリを更新してください。\n\n' +
+      '（そのまま更新すると、未保存分は失われます）'
+    );
+    return;
+  }
+
+  const ok = confirm(
+    'アプリを最新版に更新します。\n\n' +
+    '・画面が一度真っ白になります\n' +
+    '・通信が発生します（Wi-Fi環境推奨）\n' +
+    '・ローカル保存データ（入力済みデータ）は消えません\n\n' +
+    '続行しますか？'
+  );
+  if (!ok) return;
+
+  if (btn) {
+    btn.classList.add('refreshing');
+    btn.textContent = '更新中...';
+    btn.disabled = true;
+  }
+
+  try {
+    // 1. Service Worker の全キャッシュを削除
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+      console.log('[forceRefresh] キャッシュ削除:', cacheNames);
+    }
+
+    // 2. Service Worker の登録解除（次回の起動で新SW再登録）
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(reg => reg.unregister()));
+      console.log('[forceRefresh] SW登録解除:', regs.length, '件');
+    }
+
+    // 3. 少し待機してからリロード（キャッシュ操作が確実に反映されるように）
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // 4. キャッシュを迂回する形で強制リロード
+    //    URLにクエリパラメータを付けることで SW 以外のキャッシュも迂回
+    const url = new URL(window.location.href);
+    url.searchParams.set('_refresh', Date.now());
+    window.location.replace(url.toString());
+  } catch(e) {
+    console.error('[forceRefresh] error:', e);
+    alert('更新に失敗しました: ' + (e.message || e) + '\n\nブラウザを閉じて再度開いてください。');
+    if (btn) {
+      btn.classList.remove('refreshing');
+      btn.textContent = '⟳ 更新';
+      btn.disabled = false;
+    }
   }
 }
 
@@ -3452,6 +3535,13 @@ function clearCurrentAnnual() {
 
 // ===== 初期化 =====
 async function init() {
+  // 強制更新後に付与されたクエリパラメータを掃除
+  if (window.location.search.includes('_refresh=')) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('_refresh');
+    window.history.replaceState({}, '', url.toString());
+  }
+
   bindLoginEvents();
   updateUserInfoUI();
 

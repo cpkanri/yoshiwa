@@ -1861,24 +1861,27 @@ async function syncAll() {
 async function forceRefresh() {
   const btn = document.getElementById('btnForceRefresh');
 
-  // 未保存データがあれば警告
+  // 未保存データがある場合は強めの警告ダイアログで確認
   if (typeof isDirty !== 'undefined' && isDirty) {
-    alert(
-      '未保存のデータがあります。\n\n' +
-      '先に「保存」ボタンを押してからアプリを更新してください。\n\n' +
-      '（そのまま更新すると、未保存分は失われます）'
+    const okUnsaved = confirm(
+      '⚠️ 未保存のデータがあります ⚠️\n\n' +
+      'このまま更新すると、未保存の入力内容は失われます。\n\n' +
+      '・未保存分を保存してから更新する場合は「キャンセル」\n' +
+      '・未保存分を破棄して更新する場合は「OK」\n\n' +
+      '本当に更新しますか？'
     );
-    return;
+    if (!okUnsaved) return;
+  } else {
+    // 未保存なしの場合は通常の確認ダイアログ
+    const ok = confirm(
+      'アプリを最新版に更新します。\n\n' +
+      '・画面が一度真っ白になります\n' +
+      '・通信が発生します(Wi-Fi環境推奨)\n' +
+      '・ローカル保存データ(入力済みデータ)は消えません\n\n' +
+      '続行しますか？'
+    );
+    if (!ok) return;
   }
-
-  const ok = confirm(
-    'アプリを最新版に更新します。\n\n' +
-    '・画面が一度真っ白になります\n' +
-    '・通信が発生します（Wi-Fi環境推奨）\n' +
-    '・ローカル保存データ（入力済みデータ）は消えません\n\n' +
-    '続行しますか？'
-  );
-  if (!ok) return;
 
   if (btn) {
     btn.classList.add('refreshing');

@@ -5227,8 +5227,41 @@ async function exportExcel() {
             }
           }
         }
+
+        // B-6 追加: ピンポイントで長文セルに shrinkToFit を適用（はみ出し防止）
+        // F10「手動/自動」、F20「買電/自家発」: 単独セルなので shrinkToFit が機能する
+        // B12「変圧器」: 結合セルで shrinkToFit が効きにくいので、shrinkToFit + フォントサイズ縮小
+        const fitTargets = [
+          { row: 10, col: 6, shrink: true,  smallFont: false }, // F: 手動/自動
+          { row: 12, col: 2, shrink: true,  smallFont: true  }, // B: 変圧器（結合）
+          { row: 20, col: 6, shrink: true,  smallFont: false }, // F: 買電/自家発
+        ];
+        for (let week = 0; week < 5; week++) {
+          const offset = week * ROWS_PER_BLOCK_ELEC;
+          fitTargets.forEach(t => {
+            const cell = wsElec.getCell(t.row + offset, t.col);
+            if (t.shrink) {
+              const align = cell.alignment || {};
+              if (!align.wrapText) {
+                cell.alignment = Object.assign({}, align, { shrinkToFit: true });
+              }
+            }
+            if (t.smallFont) {
+              const font = cell.font || {};
+              cell.font = Object.assign({}, font, { size: 9 });
+            }
+          });
+
+          // B-6 追加: E41:E54 の右罫線を削除（F列との境界線を消す）
+          for (let r = 41 + offset; r <= 54 + offset; r++) {
+            const cell = wsElec.getCell(r, 5);  // E列
+            const border = Object.assign({}, cell.border || {});
+            delete border.right;
+            cell.border = border;
+          }
+        }
       }
-    } catch (e) { console.warn("電気設備 Row 1 クリア失敗:", e); }
+    } catch (e) { console.warn("電気設備 ピンポイント調整失敗:", e); }
 
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });

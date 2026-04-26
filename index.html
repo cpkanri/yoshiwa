@@ -862,15 +862,18 @@ body.login-active { overflow: hidden; }
 }
 .equip-table button.toggle-btn {
   width: 100%;
+  min-width: 0;  /* B-6: 全体の .toggle-btn { min-width: 130px } を上書きしてはみ出しを防ぐ */
   padding: 4px 6px;
   border: 1px solid #ccd4e0;
   border-radius: 4px;
   background: #fff;
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
   box-sizing: border-box;
   font-weight: 600;
   color: #1a4f8a;
+  height: auto;  /* .toggle-btn の height: 48px を上書き */
+  min-height: 32px;
 }
 .equip-table button.toggle-btn:hover { background: #f5f8fb; }
 .equip-table td.day-disabled {

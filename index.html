@@ -709,6 +709,178 @@ body.login-active { overflow: hidden; }
   height: 20px;
   cursor: pointer;
 }
+
+/* ===== B-1 追加: 機械・電気設備テーブル ===== */
+.sub-tabs {
+  margin: 0 12px 8px;
+  font-size: 13px;
+  background: #eef2f7;
+  border-radius: 6px;
+  padding: 3px;
+  display: inline-flex;
+  gap: 2px;
+}
+.sub-tabs button {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #5a6a7d;
+  cursor: pointer;
+  font-size: 12px;
+}
+.sub-tabs button.active {
+  background: #fff;
+  color: #1a4f8a;
+  box-shadow: 0 1px 3px rgba(0,0,0,.1);
+}
+
+.pattern-selector {
+  margin: 8px 12px;
+  padding: 10px 12px;
+  background: #f5f8fb;
+  border: 1px solid #dce4ed;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.pattern-selector label { font-weight: 600; color: #1a4f8a; }
+.pattern-selector select {
+  padding: 6px 8px;
+  border: 1px solid #c9d7e5;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.pattern-selector .pattern-display {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #fff;
+  border: 1px solid #c9d7e5;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #333;
+  min-width: 70px;
+  text-align: center;
+}
+.pattern-selector .pattern-hint {
+  color: #888;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.equip-table-wrap {
+  margin: 0 12px 12px;
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid #c9d7e5;
+  border-radius: 6px;
+  background: #fff;
+}
+.equip-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+.equip-table thead th {
+  background: #e8eff7;
+  padding: 6px 4px;
+  border: 1px solid #c9d7e5;
+  text-align: center;
+  font-weight: 600;
+  color: #1a4f8a;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.equip-table thead th:first-child {
+  width: 32%;
+  text-align: left;
+  padding-left: 8px;
+}
+.equip-table thead th:not(:first-child) {
+  width: 13.6%;
+}
+.equip-table thead th .col-date {
+  display: block;
+  font-size: 10px;
+  font-weight: normal;
+  color: #5a6a7d;
+  margin-top: 1px;
+}
+.equip-table tbody td {
+  padding: 4px;
+  border: 1px solid #d9e2eb;
+}
+.equip-table tbody td:first-child {
+  background: #f5f8fb;
+  font-weight: 500;
+  color: #333;
+  padding-left: 8px;
+  font-size: 12px;
+}
+.equip-table tbody tr.section-header td {
+  background: #e8eff7;
+  font-weight: 700;
+  color: #1a4f8a;
+  padding: 6px 8px;
+  font-size: 12.5px;
+}
+.equip-table tbody tr.section-header td:first-child {
+  background: #e8eff7;
+}
+.equip-table tbody td .item-label {
+  display: block;
+  font-size: 11px;
+  color: #555;
+}
+.equip-table tbody td .item-unit {
+  display: inline-block;
+  font-size: 10px;
+  color: #999;
+  margin-left: 4px;
+}
+.equip-table input[type="number"],
+.equip-table input[type="text"] {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #ccd4e0;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: right;
+  box-sizing: border-box;
+}
+.equip-table input:disabled,
+.equip-table button:disabled {
+  background: #f0f0f0;
+  color: #999;
+  cursor: not-allowed;
+}
+.equip-table button.toggle-btn {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #ccd4e0;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  box-sizing: border-box;
+  font-weight: 600;
+  color: #1a4f8a;
+}
+.equip-table button.toggle-btn:hover { background: #f5f8fb; }
+.equip-table td.day-disabled {
+  background: #ececec;
+}
+.equip-table td.day-disabled input,
+.equip-table td.day-disabled button {
+  background: #ececec;
+  color: #999;
+}
 </style>
 </head>
 <body>
@@ -754,6 +926,8 @@ body.login-active { overflow: hidden; }
 <!-- メインタブ (週報 / 年報) -->
 <nav class="sec-tabs" id="mainTabs" style="font-size:14px;">
   <button type="button" data-main="weekly" class="active">📄 週報入力</button>
+  <button type="button" data-main="mech">⚙️ 機械設備</button>
+  <button type="button" data-main="elec">⚡ 電気設備</button>
   <button type="button" data-main="annual">📊 年報用データ</button>
 </nav>
 
@@ -792,6 +966,77 @@ body.login-active { overflow: hidden; }
     <button type="button" data-asub="mlss_return">返送汚泥MLSS</button>
   </nav>
   <div id="annualBody"></div>
+</div>
+
+<!-- ===== 機械設備パネル ===== -->
+<div id="mechPanel" style="display:none;">
+  <!-- 週切替 -->
+  <nav class="week-tabs" id="mechWeekTabs">
+    <button type="button" data-mweek="1" class="active">第1週</button>
+    <button type="button" data-mweek="2">第2週</button>
+    <button type="button" data-mweek="3">第3週</button>
+    <button type="button" data-mweek="4">第4週</button>
+    <button type="button" data-mweek="5">第5週</button>
+  </nav>
+
+  <!-- パターン選択 -->
+  <div class="pattern-selector" id="mechPatternSelector">
+    <label>点検パターン:</label>
+    <select id="mechPattern">
+      <option value="mwf">月水金</option>
+      <option value="tt">火木</option>
+    </select>
+    <span class="pattern-hint" id="mechPatternHint">電気は自動で「火木」になります</span>
+  </div>
+
+  <!-- パート切替 (1/3, 2/3, 3/3) -->
+  <nav class="sec-tabs sub-tabs" id="mechPartTabs">
+    <button type="button" data-mpart="1" class="active">1/3</button>
+    <button type="button" data-mpart="2">2/3</button>
+    <button type="button" data-mpart="3">3/3</button>
+  </nav>
+
+  <!-- 入力テーブル -->
+  <div class="equip-table-wrap">
+    <table class="equip-table" id="mechTable">
+      <thead><tr id="mechTableHead"></tr></thead>
+      <tbody id="mechBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== 電気設備パネル ===== -->
+<div id="elecPanel" style="display:none;">
+  <!-- 週切替 -->
+  <nav class="week-tabs" id="elecWeekTabs">
+    <button type="button" data-eweek="1" class="active">第1週</button>
+    <button type="button" data-eweek="2">第2週</button>
+    <button type="button" data-eweek="3">第3週</button>
+    <button type="button" data-eweek="4">第4週</button>
+    <button type="button" data-eweek="5">第5週</button>
+  </nav>
+
+  <!-- パターン情報（読み取り専用：機械の逆） -->
+  <div class="pattern-selector">
+    <label>点検パターン:</label>
+    <span id="elecPatternDisplay" class="pattern-display">―</span>
+    <span class="pattern-hint">機械設備の逆パターン（自動）</span>
+  </div>
+
+  <!-- パート切替 -->
+  <nav class="sec-tabs sub-tabs" id="elecPartTabs">
+    <button type="button" data-epart="1" class="active">1/3</button>
+    <button type="button" data-epart="2">2/3</button>
+    <button type="button" data-epart="3">3/3</button>
+  </nav>
+
+  <!-- 入力テーブル -->
+  <div class="equip-table-wrap">
+    <table class="equip-table" id="elecTable">
+      <thead><tr id="elecTableHead"></tr></thead>
+      <tbody id="elecBody"></tbody>
+    </table>
+  </div>
 </div>
 
 <!-- 操作ボタン -->
@@ -1293,6 +1538,440 @@ const DASH_SUPPORT_FIELDS = new Set([
   ...YOSHIWA_FIELDS.lower_section.fields.filter(f => f.dashSupport).map(f => f.id)
 ]);
 
+// =====================================================
+// 電気・機械設備の機器マスター（B-1 追加）
+// =====================================================
+// =====================================================
+// 機械設備セクション定義 (吉和)
+// row = 日常機械設備シート上の行番号 (Excel出力時の参照用)
+// =====================================================
+const MECH_SECTIONS = [
+
+  // ── パート1: 機械設備日常点検表 (1/3) ──
+  { part: 1, title: "ポンプ井", fields: [
+    { key: "pumpWell_innerCheck", row: 4, label: "内部状況確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "汚水ポンプ No.1", fields: [
+    { key: "sewagePump1_current", row: 5, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "sewagePump1_pressure", row: 6, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "sewagePump1_vibration", row: 7, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "汚水ポンプ No.2", fields: [
+    { key: "sewagePump2_current", row: 8, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "sewagePump2_pressure", row: 9, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "sewagePump2_vibration", row: 10, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "汚水ポンプ", fields: [
+    { key: "sewagePump_mode", row: 11, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "sewagePump_priority", row: 12, label: "先行機選択", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "自動除塵機", fields: [
+    { key: "autoScreen_hydraulic", row: 13, label: "油圧圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "autoScreen_vibration", row: 14, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "autoScreen_debris", row: 15, label: "し渣量の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "autoScreen_operation", row: 16, label: "運転動作", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "エアレーション装置 No.1-1", fields: [
+    { key: "aeration1_1_current", row: 17, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "aeration1_1_vibration", row: 18, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "aeration1_1_mode", row: 19, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "エアレーション装置 No.1-2", fields: [
+    { key: "aeration1_2_current", row: 20, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "aeration1_2_vibration", row: 21, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "aeration1_2_mode", row: 22, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "エアレーション装置 No.2-1", fields: [
+    { key: "aeration2_1_current", row: 23, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "aeration2_1_vibration", row: 24, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "aeration2_1_mode", row: 25, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "エアレーション装置 No.2-2", fields: [
+    { key: "aeration2_2_current", row: 26, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "aeration2_2_vibration", row: 27, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "aeration2_2_mode", row: 28, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "消泡装置", fields: [
+    { key: "defoam_nozzle", row: 29, label: "消泡ノズル", type: "toggle", options: ["○","△","×"] },
+    { key: "defoam_foamStatus", row: 30, label: "消泡状態", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "流出可動堰 No.1", fields: [
+    { key: "outflowWeir1_opening", row: 31, label: "開度", type: "number", step: "0.01", unit: "mm" },
+  ]},
+  { part: 1, title: "流出可動堰 No.2", fields: [
+    { key: "outflowWeir2_opening", row: 32, label: "開度", type: "number", step: "0.01", unit: "mm" },
+  ]},
+  { part: 1, title: "流出ゲート No.1", fields: [
+    { key: "outflowGate1_opening", row: 33, label: "開度", type: "number", step: "0.01", unit: "mm" },
+  ]},
+  { part: 1, title: "流出ゲート No.2", fields: [
+    { key: "outflowGate2_opening", row: 34, label: "開度", type: "number", step: "0.01", unit: "mm" },
+  ]},
+  { part: 1, title: "連絡ゲート", fields: [
+    { key: "connectGate_opening", row: 35, label: "開度", type: "number", step: "0.01", unit: "mm" },
+  ]},
+  { part: 1, title: "スカム排出ゲート No.1", fields: [
+    { key: "scumGate1_opening", row: 36, label: "開度", type: "number", step: "0.01", unit: "mm" },
+  ]},
+  { part: 1, title: "スカム排出ゲート No.2", fields: [
+    { key: "scumGate2_opening", row: 37, label: "開度", type: "number", step: "0.01", unit: "mm" },
+  ]},
+  { part: 1, title: "終沈汚泥掻寄機 No.1", fields: [
+    { key: "finalScraper1_current", row: 38, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "finalScraper1_vibration", row: 39, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "終沈汚泥掻寄機 No.2", fields: [
+    { key: "finalScraper2_current", row: 40, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "finalScraper2_vibration", row: 41, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "スカムスキマー No.1", fields: [
+    { key: "scumSkimmer1_operation", row: 42, label: "動作状況", type: "toggle", options: ["○","△","×"] },
+    { key: "scumSkimmer1_scumStatus", row: 43, label: "スカムの状況", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "スカムスキマー No.2", fields: [
+    { key: "scumSkimmer2_operation", row: 44, label: "動作状況", type: "toggle", options: ["○","△","×"] },
+    { key: "scumSkimmer2_scumStatus", row: 45, label: "スカムの状況", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "返送汚泥ポンプ No.1-1", fields: [
+    { key: "returnSludgePump1_1_current", row: 46, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "returnSludgePump1_1_pressure", row: 47, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "returnSludgePump1_1_vibration", row: 48, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "返送汚泥ポンプ No.1-2", fields: [
+    { key: "returnSludgePump1_2_current", row: 49, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "returnSludgePump1_2_pressure", row: 50, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "returnSludgePump1_2_vibration", row: 51, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "返送汚泥ポンプ No.1系共通", fields: [
+    { key: "returnSludgePump1Common_mode", row: 52, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "returnSludgePump1Common_priority", row: 53, label: "常用機選択", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "返送汚泥ポンプ No.2-1", fields: [
+    { key: "returnSludgePump2_1_current", row: 54, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "returnSludgePump2_1_pressure", row: 55, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "returnSludgePump2_1_vibration", row: 56, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "返送汚泥ポンプ No.2-2", fields: [
+    { key: "returnSludgePump2_2_current", row: 57, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "returnSludgePump2_2_pressure", row: 58, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "returnSludgePump2_2_vibration", row: 59, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 1, title: "返送汚泥ポンプ No.2系共通", fields: [
+    { key: "returnSludgePump2Common_mode", row: 60, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "returnSludgePump2Common_priority", row: 61, label: "常用機選択", type: "toggle", options: ["○","△","×"] },
+  ]},
+
+  // ── パート2: 機械設備日常点検表 (2/3) ──
+  { part: 2, title: "余剰汚泥ポンプ No.1", fields: [
+    { key: "excessSludgePump1_current", row: 66, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "excessSludgePump1_pressure", row: 67, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "excessSludgePump1_vibration", row: 68, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "excessSludgePump1_leak", row: 69, label: "液漏れ", type: "toggle", options: ["○","△","×"] },
+    { key: "excessSludgePump1_mode", row: 70, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "余剰汚泥ポンプ No.2", fields: [
+    { key: "excessSludgePump2_current", row: 71, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "excessSludgePump2_pressure", row: 72, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "excessSludgePump2_vibration", row: 73, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "excessSludgePump2_leak", row: 74, label: "液漏れ", type: "toggle", options: ["○","△","×"] },
+    { key: "excessSludgePump2_mode", row: 75, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "終沈床排水ポンプ", fields: [
+    { key: "finalDrainPump_pressure", row: 76, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "finalDrainPump_vibration", row: 77, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "finalDrainPump_mode", row: 78, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "返流水ポンプ No.1-1", fields: [
+    { key: "returnFlowPump1_1_current", row: 79, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "returnFlowPump1_1_pressure", row: 80, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "returnFlowPump1_1_vibration", row: 81, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "返流水ポンプ No.1-2", fields: [
+    { key: "returnFlowPump1_2_current", row: 82, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "returnFlowPump1_2_pressure", row: 83, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "returnFlowPump1_2_vibration", row: 84, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "返流水ポンプ No.1系共通", fields: [
+    { key: "returnFlowPump1Common_mode", row: 85, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "returnFlowPump1Common_priority", row: 86, label: "常用機選択", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "返流水ポンプ No.2-1", fields: [
+    { key: "returnFlowPump2_1_current", row: 87, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "returnFlowPump2_1_pressure", row: 88, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "returnFlowPump2_1_vibration", row: 89, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "返流水ポンプ No.2-2", fields: [
+    { key: "returnFlowPump2_2_current", row: 90, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "returnFlowPump2_2_pressure", row: 91, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "returnFlowPump2_2_vibration", row: 92, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "返流水ポンプ No.2系共通", fields: [
+    { key: "returnFlowPump2Common_mode", row: 93, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "returnFlowPump2Common_priority", row: 94, label: "常用機選択", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "濃縮汚泥引抜ポンプ No.1", fields: [
+    { key: "thickSludgePump1_current", row: 95, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "thickSludgePump1_pressure", row: 96, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "thickSludgePump1_vibration", row: 97, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "濃縮汚泥引抜ポンプ No.2", fields: [
+    { key: "thickSludgePump2_current", row: 98, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "thickSludgePump2_pressure", row: 99, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "thickSludgePump2_vibration", row: 100, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "濃縮汚泥引抜ポンプ", fields: [
+    { key: "thickSludgePump_mode", row: 101, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "thickSludgePump_priority", row: 102, label: "先行機選択", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "汚泥Ｐ室床排水ポンプ", fields: [
+    { key: "sludgePumpRoomDrain_pressure", row: 103, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "sludgePumpRoomDrain_vibration", row: 104, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgePumpRoomDrain_priority", row: 105, label: "先行機選択", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "濃縮汚泥掻寄機", fields: [
+    { key: "thickScraper_vibration", row: 106, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "スカムスキマー", fields: [
+    { key: "scumSkimmer_operation", row: 107, label: "動作状況", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "汚泥供給ポンプ No.1", fields: [
+    { key: "sludgeSupplyPump1_pressure", row: 108, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "sludgeSupplyPump1_vibration", row: 109, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgeSupplyPump1_leak", row: 110, label: "液漏れ", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "汚泥供給ポンプ No.2", fields: [
+    { key: "sludgeSupplyPump2_pressure", row: 111, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "sludgeSupplyPump2_vibration", row: 112, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgeSupplyPump2_leak", row: 113, label: "液漏れ", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "汚泥貯留槽攪拌機", fields: [
+    { key: "sludgeTankStirrer_current", row: 114, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "sludgeTankStirrer_vibration", row: 115, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgeTankStirrer_mode", row: 116, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "配管ピットポンプ", fields: [
+    { key: "pipePitPump_pressure", row: 117, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "pipePitPump_vibration", row: 118, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "pipePitPump_mode", row: 119, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 2, title: "空気圧縮機", fields: [
+    { key: "airCompressor_vibration", row: 120, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
+    { key: "airCompressor_safetyValve", row: 121, label: "安全弁等の動作確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+
+  // ── パート3: 機械設備日常点検表 (3/3) ──
+  { part: 3, title: "井水揚水ポンプ", fields: [
+    { key: "wellPump_current", row: 128, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "wellPump_pressure", row: 129, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
+    { key: "wellPump_vibration", row: 130, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
+    { key: "wellPump_mode", row: 131, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "自動給水装置 No.1", fields: [
+    { key: "autoWaterSupply1_current", row: 132, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "autoWaterSupply1_vibration", row: 133, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "自動給水装置 No.2", fields: [
+    { key: "autoWaterSupply2_current", row: 134, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "autoWaterSupply2_vibration", row: 135, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "自動給水装置", fields: [
+    { key: "autoWaterSupply_mode", row: 136, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "autoWaterSupply_priority", row: 137, label: "先行機選択", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "井水貯留槽", fields: [
+    { key: "wellTank_waterLeak", row: 138, label: "水漏れ", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "混和池ＢＧ", fields: [
+    { key: "mixingBG_switch", row: 139, label: "開閉", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "塩素接触装置", fields: [
+    { key: "chlorineContact_remainCheck", row: 140, label: "薬剤残量確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "臭気ガス吸引装置", fields: [
+    { key: "odorGasFan_current", row: 141, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "odorGasFan_boltLoose", row: 142, label: "ボルト・ナットの緩み", type: "toggle", options: ["○","△","×"] },
+    { key: "odorGasFan_mode", row: 143, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "吸着脱装置", fields: [
+    { key: "adsorbent_manometer", row: 144, label: "マノメータ等の作動確認", type: "toggle", options: ["○","△","×"] },
+    { key: "adsorbent_boltLoose", row: 145, label: "ボルト・ナットの緩み", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "電気室給気ファン", fields: [
+    { key: "elecRoomSupply_current", row: 146, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "elecRoomSupply_vibration", row: 147, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
+    { key: "elecRoomSupply_mode", row: 148, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "電気室排気ファン", fields: [
+    { key: "elecRoomExhaust_current", row: 149, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "elecRoomExhaust_vibration", row: 150, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
+    { key: "elecRoomExhaust_mode", row: 151, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "自家発室給気ファン", fields: [
+    { key: "genRoomSupply_vibration", row: 152, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "genRoomSupply_mode", row: 153, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "自家発室排気ファン", fields: [
+    { key: "genRoomExhaust_vibration", row: 154, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "genRoomExhaust_mode", row: 155, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "終沈ポンプ室ルーフファン", fields: [
+    { key: "finalRoofFan_vibration", row: 156, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "finalRoofFan_mode", row: 157, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "終沈ポンプ室換気扇", fields: [
+    { key: "finalVentFan_vibration", row: 158, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "finalVentFan_mode", row: 159, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "汚泥ポンプ室給気ファン", fields: [
+    { key: "sludgeRoomSupply_vibration", row: 160, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgeRoomSupply_mode", row: 161, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "汚泥ポンプ室排気ファン", fields: [
+    { key: "sludgeRoomExhaust_vibration", row: 162, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgeRoomExhaust_mode", row: 163, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "脱水機室給気ファン", fields: [
+    { key: "dehydrateSupply_vibration", row: 164, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "dehydrateSupply_mode", row: 165, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "脱水機室排気ファン", fields: [
+    { key: "dehydrateExhaust_vibration", row: 166, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
+    { key: "dehydrateExhaust_mode", row: 167, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+  { part: 3, title: "自家発室自動巻取型エアフィルター", fields: [
+    { key: "autoAirFilter_current", row: 168, label: "電流値", type: "number", step: "0.1", unit: "A" },
+    { key: "autoAirFilter_rollComplete", row: 169, label: "巻取完了表示点灯確認", type: "toggle", options: ["○","△","×"] },
+    { key: "autoAirFilter_pressureDiff", row: 170, label: "差圧", type: "number", step: "0.01", unit: "Pa" },
+    { key: "autoAirFilter_mode", row: 171, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+  ]},
+];
+
+// =====================================================
+// 電気設備セクション定義 (吉和)
+// row = 日常電気設備シート上の行番号 (Excel出力時の参照用)
+// 「使用量」は Excel 数式で自動計算（=G8-Q8 等）→ 入力不要
+// =====================================================
+const ELEC_SECTIONS = [
+  // ── パート1: 電気設備 (1/3) ──
+  { part: 1, title: "引込・受電", fields: [
+    { key: "incomingVoltage", row: 3, label: "電圧", type: "number", step: "0.01", unit: "KV" },
+    { key: "incomingVoltageMode", row: 4, label: "電圧モード", type: "toggle", options: ["RO","RS"] },
+    { key: "incomingPowerFactor", row: 5, label: "力率", type: "number", step: "0.01", unit: "ψ" },
+    { key: "incomingCurrent", row: 6, label: "電流", type: "number", step: "0.1", unit: "A" },
+    { key: "incomingCurrentMode", row: 7, label: "電流モード", type: "toggle", options: ["RO","RS"] },
+    { key: "normalPowerReading", row: 8, label: "普通電力量(読み×10kw)", type: "text", inputmode: "decimal", placeholder: "-", unit: "kWh" },
+    { key: "incomingSetting", row: 10, label: "引込・受電設定", type: "toggle", options: ["手動","自動"] },
+    { key: "incomingSwitch", row: 11, label: "切/入", type: "toggle", options: ["切","入"] }
+  ]},
+  { part: 1, title: "変圧器", fields: [
+    { key: "transformerTemp", row: 12, label: "主変圧器温度", type: "number", step: "1", unit: "℃" },
+    { key: "transformerSound", row: 13, label: "異音、脱臭の有無", type: "toggle", options: ["有","無"] }
+  ]},
+  { part: 1, title: "低圧分岐", fields: [
+    { key: "powerVoltage", row: 14, label: "動力(210V) 電圧", type: "number", step: "1", unit: "V" },
+    { key: "powerVoltageMode", row: 15, label: "電圧モード", type: "toggle", options: ["RO","RS"] },
+    { key: "powerCurrent", row: 16, label: "動力(210V) 電流", type: "number", step: "0.1", unit: "A" },
+    { key: "powerCurrentMode", row: 17, label: "電流モード", type: "toggle", options: ["RO","RS"] },
+    { key: "lightingCurrent", row: 18, label: "照明(210-105V) 電流", type: "number", step: "0.1", unit: "A" },
+    { key: "lightingMode", row: 19, label: "照明モード", type: "toggle", options: ["RO","RS"] },
+    { key: "lvBranchSource", row: 20, label: "低圧分岐設備", type: "toggle", options: ["買電","自家発"] },
+    { key: "sandPumpReading", row: 21, label: "沈砂池ポンプ電力量(読み)", type: "text", inputmode: "decimal", placeholder: "-", unit: "kWh" },
+    { key: "waterTreat1Reading", row: 23, label: "水処理設備(1)電力量(読み)", type: "text", inputmode: "decimal", placeholder: "-", unit: "kWh" },
+    { key: "waterTreat2Reading", row: 25, label: "水処理設備(2)電力量(読み)", type: "text", inputmode: "decimal", placeholder: "-", unit: "kWh" },
+    { key: "sludgeTreatReading", row: 27, label: "汚泥処理設備電力量(読み)", type: "text", inputmode: "decimal", placeholder: "-", unit: "kWh" },
+    { key: "condenser1", row: 29, label: "No.1 コンデンサー", type: "toggle", options: ["切","入"] },
+    { key: "condenser2", row: 30, label: "No.2 コンデンサー", type: "toggle", options: ["切","入"] },
+    { key: "condenser3", row: 31, label: "No.3 コンデンサー", type: "toggle", options: ["切","入"] }
+  ]},
+
+  // ── パート2: 電気設備 (2/3) - 計装設備 ──
+  { part: 2, title: "ポンプ井水位計", fields: [
+    { key: "pumpWellLook", row: 38, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "pumpWellStatus", row: 39, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "pumpWellMeterReading", row: 40, label: "計器読み", type: "number", step: "0.001", unit: "m" }
+  ]},
+  { part: 2, title: "No.1オキシディッチDO計", fields: [
+    { key: "do1Look", row: 41, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "do1Status", row: 42, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "do1Value", row: 43, label: "DO値", type: "number", step: "0.01", unit: "mg/L" }
+  ]},
+  { part: 2, title: "No.2オキシディッチDO計", fields: [
+    { key: "do2Look", row: 44, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "do2Status", row: 45, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "do2Value", row: 46, label: "DO値", type: "number", step: "0.01", unit: "mg/L" }
+  ]},
+  { part: 2, title: "No.1返送汚泥流量計", fields: [
+    { key: "returnFlow1Look", row: 47, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "returnFlow1Status", row: 48, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "returnFlow1Reading", row: 49, label: "流量計の読み", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥/h" },
+    { key: "returnFlow1Total", row: 50, label: "流量計積算", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥" }
+  ]},
+  { part: 2, title: "No.2返送汚泥流量計", fields: [
+    { key: "returnFlow2Look", row: 51, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "returnFlow2Status", row: 52, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "returnFlow2Reading", row: 53, label: "流量計の読み", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥/h" },
+    { key: "returnFlow2Total", row: 54, label: "流量計積算", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥" }
+  ]},
+  { part: 2, title: "余剰汚泥流量計", fields: [
+    { key: "excessFlowLook", row: 55, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "excessFlowStatus", row: 56, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "excessFlow1Reading", row: 57, label: "No.1余剰汚泥ポンプ流量", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥/h" },
+    { key: "excessFlow2Reading", row: 58, label: "No.2余剰汚泥ポンプ流量", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥/h" },
+    { key: "excessFlowTotal", row: 59, label: "流量計積算", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥" }
+  ]},
+  { part: 2, title: "放流流量計", fields: [
+    { key: "dischargeFlowLook", row: 60, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "dischargeFlowStatus", row: 61, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "dischargeFlowReading", row: 62, label: "流量計の読み", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥/h" },
+    { key: "dischargeFlowTotal", row: 63, label: "流量計積算", type: "text", inputmode: "decimal", placeholder: "-", unit: "㎥" }
+  ]},
+  { part: 2, title: "汚濁負荷量計(放流水UV)", fields: [
+    { key: "uvLook", row: 64, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "uvStatus", row: 65, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "uvValue", row: 66, label: "UV値", type: "number", step: "0.001", unit: "Abs" },
+    { key: "codValue", row: 67, label: "COD値", type: "number", step: "0.01", unit: "mg/L" }
+  ]},
+
+  // ── パート3: 電気設備 (3/3) ──
+  { part: 3, title: "全窒素・全燐計", fields: [
+    { key: "tnTpLook", row: 73, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "tnTpStatus", row: 74, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "tnReading", row: 75, label: "全窒素", type: "text", inputmode: "decimal", placeholder: "-", unit: "mg/L" },
+    { key: "tpReading", row: 76, label: "全りん", type: "text", inputmode: "decimal", placeholder: "-", unit: "mg/L" }
+  ]},
+  { part: 3, title: "圧力式液位計", fields: [
+    { key: "pressureLook", row: 77, label: "外観の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "pressureStatus", row: 78, label: "指示状況の確認", type: "toggle", options: ["○","△","×"] },
+    { key: "pressureReading", row: 79, label: "機器指示値", type: "text", inputmode: "decimal", placeholder: "-", unit: "m" }
+  ]},
+  { part: 3, title: "発電機設備", fields: [
+    { key: "generatorLook", row: 80, label: "発電機盤 外観", type: "toggle", options: ["○","△","×"] },
+    { key: "engineLook", row: 81, label: "エンジン 外観", type: "toggle", options: ["○","△","×"] },
+    { key: "fuelTankLook", row: 82, label: "燃料タンク 外観", type: "toggle", options: ["○","△","×"] },
+    { key: "fuelRemain", row: 83, label: "燃料残量", type: "number", step: "1", unit: "L" }
+  ]},
+  { part: 3, title: "その他", fields: [
+    { key: "alarmStatus", row: 84, label: "通報装置 状態", type: "toggle", options: ["○","△","×"] }
+  ]}
+];
+
+// =====================================================
+// 曜日キーマッピング (吉和: 数字 ↔ 文字列)
+// 既存: currentDay = 1〜5 (1=月,5=金)
+// 新規 elec/mech: "mon"〜"fri"
+// =====================================================
+const DAY_NUM_TO_STR = { 1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri" };
+const DAY_STR_TO_NUM = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5 };
+const EQUIP_DAYS = ["mon", "tue", "wed", "thu", "fri"];
+
+// 点検パターン定義（吉和独自）
+// 機械: 月水金 OR 火木 / 電気: 機械の逆
+const SCHEDULE_PATTERNS = {
+  mwf: { label: "月水金", days: ["mon", "wed", "fri"] },
+  tt:  { label: "火木",   days: ["tue", "thu"] }
+};
+
+
 // ===== 休業日（祝日・年末年始休暇）=====
 // 吉和水質管理センターは祝日・年末年始は出勤せず、点検・測定・記録を行わない。
 // このテーブルに載った日は UI で入力不可、Excel出力では該当セル（固定値含む）を空欄にする。
@@ -1402,14 +2081,23 @@ const YOSHIWA_ANNUAL = {
 let yoshiwaData = {
   targetMonth: "",
   startDate: "",
-  weeks: {}
+  weeks: {},
+  // B-1 追加: 機械・電気設備
+  mech: {},          // { 1: {pattern:"mwf", days: {mon:{...}, wed:{...}, fri:{...}}}, 2:{...}, ... 5:{...} }
+  elec: {}           // { 1: {pattern:"tt",  days: {tue:{...}, thu:{...}}}, ... }
 };
 let currentWeek = 1;
 let currentSection = "upper"; // upper | lower
 // currentDay は「曜日インデックス」: 1=月, 2=火, 3=水, 4=木, 5=金
 // 月外の日は monthWeeks[w-1][d] が null になり、UI/出力ともにスキップ
 let currentDay = 1;
-let currentMain = "weekly";   // weekly | annual
+let currentMain = "weekly";   // weekly | mech | elec | annual
+
+// ===== B-1 追加: 機械・電気設備の状態変数 =====
+let currentMechWeek = 1;
+let currentMechPart = 1;
+let currentElecWeek = 1;
+let currentElecPart = 1;
 let currentAnnualSub = "aeration"; // aeration | mlss_return
 let currentMlssWeek = 1;
 let currentMlssDay = 1;
@@ -1481,6 +2169,70 @@ function ensureStructure() {
     }
     // 旧形式の day 6 を破棄
     if (yoshiwaData.weeks[w][6]) delete yoshiwaData.weeks[w][6];
+  }
+
+  // B-1 追加: 機械・電気の構造を保証
+  ensureMechElecStructure();
+}
+
+// ===== B-1 追加: 機械・電気設備のデータ構造保証 =====
+function emptyMechWeek() {
+  // 機械: pattern + days (mon〜fri 全部用意、UIで活性日のみ操作)
+  const days = {};
+  EQUIP_DAYS.forEach(dk => { days[dk] = emptyMechDay(); });
+  return { pattern: "mwf", days: days };
+}
+function emptyMechDay() {
+  const obj = {};
+  MECH_SECTIONS.forEach(sec => {
+    sec.fields.forEach(f => { obj[f.key] = null; });
+  });
+  return obj;
+}
+function emptyElecWeek() {
+  const days = {};
+  EQUIP_DAYS.forEach(dk => { days[dk] = emptyElecDay(); });
+  return { pattern: "tt", days: days };
+}
+function emptyElecDay() {
+  const obj = {};
+  ELEC_SECTIONS.forEach(sec => {
+    sec.fields.forEach(f => { obj[f.key] = null; });
+  });
+  return obj;
+}
+function ensureMechElecStructure() {
+  if (!yoshiwaData.mech || typeof yoshiwaData.mech !== "object") yoshiwaData.mech = {};
+  if (!yoshiwaData.elec || typeof yoshiwaData.elec !== "object") yoshiwaData.elec = {};
+
+  for (let w = 1; w <= 5; w++) {
+    // 機械
+    if (!yoshiwaData.mech[w]) yoshiwaData.mech[w] = emptyMechWeek();
+    if (!yoshiwaData.mech[w].days) yoshiwaData.mech[w].days = {};
+    EQUIP_DAYS.forEach(dk => {
+      if (!yoshiwaData.mech[w].days[dk]) yoshiwaData.mech[w].days[dk] = emptyMechDay();
+      // 欠損補填
+      MECH_SECTIONS.forEach(sec => {
+        sec.fields.forEach(f => {
+          if (!(f.key in yoshiwaData.mech[w].days[dk])) yoshiwaData.mech[w].days[dk][f.key] = null;
+        });
+      });
+    });
+    if (!yoshiwaData.mech[w].pattern) yoshiwaData.mech[w].pattern = "mwf";
+
+    // 電気
+    if (!yoshiwaData.elec[w]) yoshiwaData.elec[w] = emptyElecWeek();
+    if (!yoshiwaData.elec[w].days) yoshiwaData.elec[w].days = {};
+    EQUIP_DAYS.forEach(dk => {
+      if (!yoshiwaData.elec[w].days[dk]) yoshiwaData.elec[w].days[dk] = emptyElecDay();
+      ELEC_SECTIONS.forEach(sec => {
+        sec.fields.forEach(f => {
+          if (!(f.key in yoshiwaData.elec[w].days[dk])) yoshiwaData.elec[w].days[dk][f.key] = null;
+        });
+      });
+    });
+    // 電気パターンは機械の逆
+    yoshiwaData.elec[w].pattern = (yoshiwaData.mech[w].pattern === "mwf") ? "tt" : "mwf";
   }
 }
 
@@ -2373,6 +3125,8 @@ function renderAll() {
   // メインタブ表示切替
   const weeklyPanel = document.getElementById("weeklyPanel");
   const annualPanel = document.getElementById("annualPanel");
+  const mechPanel = document.getElementById("mechPanel");
+  const elecPanel = document.getElementById("elecPanel");
   const btnCopy = document.getElementById("btnCopy");
   const btnClear = document.getElementById("btnClear");
   const btnExcel = document.getElementById("btnExcel");
@@ -2380,9 +3134,15 @@ function renderAll() {
   document.querySelectorAll("#mainTabs button").forEach(b => {
     b.classList.toggle("active", b.dataset.main === currentMain);
   });
+
+  // 全パネル一旦非表示
+  if (weeklyPanel) weeklyPanel.style.display = "none";
+  if (annualPanel) annualPanel.style.display = "none";
+  if (mechPanel) mechPanel.style.display = "none";
+  if (elecPanel) elecPanel.style.display = "none";
+
   if (currentMain === "weekly") {
     weeklyPanel.style.display = "";
-    annualPanel.style.display = "none";
     if (btnCopy) btnCopy.style.display = "";
     if (btnExcel) btnExcel.style.display = "";
     if (btnYearExcel) btnYearExcel.style.display = "none";
@@ -2391,14 +3151,25 @@ function renderAll() {
     renderDayTabs();
     renderWeekInfo();
     renderForm();
-  } else {
-    weeklyPanel.style.display = "none";
+  } else if (currentMain === "annual") {
     annualPanel.style.display = "";
     if (btnCopy) btnCopy.style.display = "none";
     if (btnExcel) btnExcel.style.display = "none";
     if (btnYearExcel) btnYearExcel.style.display = "";
     renderAnnualSubTabs();
     renderAnnualBody();
+  } else if (currentMain === "mech") {
+    mechPanel.style.display = "";
+    if (btnCopy) btnCopy.style.display = "none";
+    if (btnExcel) btnExcel.style.display = "";
+    if (btnYearExcel) btnYearExcel.style.display = "none";
+    renderMechPanel();
+  } else if (currentMain === "elec") {
+    elecPanel.style.display = "";
+    if (btnCopy) btnCopy.style.display = "none";
+    if (btnExcel) btnExcel.style.display = "";
+    if (btnYearExcel) btnYearExcel.style.display = "none";
+    renderElecPanel();
   }
 }
 
@@ -2413,6 +3184,149 @@ function renderAnnualSubTabs() {
   document.querySelectorAll("#annualSubTabs button").forEach(b => {
     b.classList.toggle("active", b.dataset.asub === currentAnnualSub);
   });
+}
+
+// =====================================================
+// B-1 追加: 機械・電気設備 描画関数
+// =====================================================
+
+// 指定週・曜日キーから実際の Date を取得（既存の getDateForDay は数字キー版）
+function getDateForDayKey(weekIdx, dayKey) {
+  const dayIdx = DAY_STR_TO_NUM[dayKey];
+  if (!dayIdx) return null;
+  return getDateForDay(weekIdx, dayIdx);
+}
+
+// 列ヘッダーの日付（M/D）を更新
+function updateColDateHeaders(tableId, weekIdx) {
+  document.querySelectorAll("#" + tableId + " thead .col-date").forEach(span => {
+    const dk = span.dataset.hday;
+    const d = getDateForDayKey(weekIdx, dk);
+    span.textContent = d ? (d.getMonth() + 1) + "/" + d.getDate() : "";
+  });
+}
+
+// パターンに応じて活性日を判定
+function isDayActiveForPattern(pattern, dayKey) {
+  const p = SCHEDULE_PATTERNS[pattern];
+  return p ? p.days.indexOf(dayKey) >= 0 : false;
+}
+
+// 列ヘッダー HTML を生成（曜日ラベル + 日付スパン）
+function buildEquipTableHead() {
+  const dayLabels = ["月", "火", "水", "木", "金"];
+  let html = '<th>機器/項目</th>';
+  EQUIP_DAYS.forEach((dk, i) => {
+    html += `<th>${dayLabels[i]}<br><span class="col-date" data-hday="${dk}"></span></th>`;
+  });
+  return html;
+}
+
+// 機器セクション + 項目行のHTML生成（共通）
+// kind: "mech" or "elec"
+// part: 1 | 2 | 3
+// weekIdx: 1〜5
+function buildEquipTableBody(kind, part, weekIdx) {
+  const sections = (kind === "mech") ? MECH_SECTIONS : ELEC_SECTIONS;
+  const dataAttr = (kind === "mech") ? "data-mfield" : "data-efield";
+  const dayAttr = (kind === "mech") ? "data-mday" : "data-eday";
+  const week = (kind === "mech") ? yoshiwaData.mech[weekIdx] : yoshiwaData.elec[weekIdx];
+  const pattern = week ? week.pattern : "mwf";
+
+  let html = "";
+  sections.filter(s => s.part === part).forEach(sec => {
+    // セクション見出し行
+    html += `<tr class="section-header"><td colspan="6">${escapeHtml(sec.title)}</td></tr>`;
+
+    sec.fields.forEach(f => {
+      // 1列目: 項目名 + 単位
+      const label = `<span class="item-label">${escapeHtml(f.label)}${f.unit ? '<span class="item-unit">('+escapeHtml(f.unit)+')</span>' : ''}</span>`;
+      html += `<tr><td>${label}`;
+
+      // 2-6列目: 各曜日の入力セル
+      EQUIP_DAYS.forEach(dk => {
+        const active = isDayActiveForPattern(pattern, dk);
+        const date = getDateForDayKey(weekIdx, dk);
+        const inMonth = !!date;
+        const enabled = active && inMonth;
+        const cls = enabled ? "" : ' class="day-disabled"';
+        const disabledAttr = enabled ? "" : ' disabled';
+
+        if (f.type === "number") {
+          html += `<td${cls}><input type="number" inputmode="decimal" step="${f.step || '1'}" ${dataAttr}="${f.key}" ${dayAttr}="${dk}"${disabledAttr}></td>`;
+        } else if (f.type === "text") {
+          html += `<td${cls}><input type="text" inputmode="${f.inputmode || 'decimal'}" ${dataAttr}="${f.key}" ${dayAttr}="${dk}" placeholder="${f.placeholder || ''}"${disabledAttr}></td>`;
+        } else if (f.type === "toggle") {
+          const opts = JSON.stringify(f.options || []).replace(/"/g, '&quot;');
+          html += `<td${cls}><button type="button" class="toggle-btn" ${dataAttr}="${f.key}" ${dayAttr}="${dk}" data-options="${opts}"${disabledAttr}>―</button></td>`;
+        } else {
+          html += `<td${cls}>—</td>`;
+        }
+      });
+      html += `</tr>`;
+    });
+  });
+  return html;
+}
+
+// 機械パネル描画
+function renderMechPanel() {
+  // 週タブ active
+  document.querySelectorAll("#mechWeekTabs button").forEach(b => {
+    b.classList.toggle("active", Number(b.dataset.mweek) === currentMechWeek);
+  });
+  // パートタブ active
+  document.querySelectorAll("#mechPartTabs button").forEach(b => {
+    b.classList.toggle("active", Number(b.dataset.mpart) === currentMechPart);
+  });
+
+  // パターン選択の表示
+  const patternSel = document.getElementById("mechPattern");
+  if (patternSel) {
+    const week = yoshiwaData.mech[currentMechWeek];
+    patternSel.value = week ? week.pattern : "mwf";
+    const hint = document.getElementById("mechPatternHint");
+    if (hint) {
+      hint.textContent = (patternSel.value === "mwf")
+        ? "電気は自動で「火木」になります"
+        : "電気は自動で「月水金」になります";
+    }
+  }
+
+  // テーブルヘッダー
+  const head = document.getElementById("mechTableHead");
+  if (head) head.innerHTML = buildEquipTableHead();
+  // 列ヘッダー日付
+  updateColDateHeaders("mechTable", currentMechWeek);
+
+  // テーブル本体
+  const body = document.getElementById("mechBody");
+  if (body) body.innerHTML = buildEquipTableBody("mech", currentMechPart, currentMechWeek);
+}
+
+// 電気パネル描画
+function renderElecPanel() {
+  document.querySelectorAll("#elecWeekTabs button").forEach(b => {
+    b.classList.toggle("active", Number(b.dataset.eweek) === currentElecWeek);
+  });
+  document.querySelectorAll("#elecPartTabs button").forEach(b => {
+    b.classList.toggle("active", Number(b.dataset.epart) === currentElecPart);
+  });
+
+  // パターン表示（機械の逆を自動表示）
+  const display = document.getElementById("elecPatternDisplay");
+  if (display) {
+    const week = yoshiwaData.elec[currentElecWeek];
+    const p = week ? week.pattern : "tt";
+    display.textContent = (SCHEDULE_PATTERNS[p] && SCHEDULE_PATTERNS[p].label) || p;
+  }
+
+  const head = document.getElementById("elecTableHead");
+  if (head) head.innerHTML = buildEquipTableHead();
+  updateColDateHeaders("elecTable", currentElecWeek);
+
+  const body = document.getElementById("elecBody");
+  if (body) body.innerHTML = buildEquipTableBody("elec", currentElecPart, currentElecWeek);
 }
 
 function ensureAerationForMonth(ym) {
@@ -3614,6 +4528,49 @@ function bindEvents() {
       saveCurrentFormToData();
       currentAnnualSub = btn.dataset.asub;
       renderAll();
+    });
+  });
+
+  // ===== B-1 追加: 機械設備のイベント =====
+  document.querySelectorAll("#mechWeekTabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      currentMechWeek = Number(btn.dataset.mweek);
+      renderMechPanel();
+    });
+  });
+  document.querySelectorAll("#mechPartTabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      currentMechPart = Number(btn.dataset.mpart);
+      renderMechPanel();
+    });
+  });
+  const mechPatternSel = document.getElementById("mechPattern");
+  if (mechPatternSel) {
+    mechPatternSel.addEventListener("change", () => {
+      const newPattern = mechPatternSel.value;
+      if (yoshiwaData.mech[currentMechWeek]) {
+        yoshiwaData.mech[currentMechWeek].pattern = newPattern;
+      }
+      // 電気は機械の逆
+      if (yoshiwaData.elec[currentMechWeek]) {
+        yoshiwaData.elec[currentMechWeek].pattern = (newPattern === "mwf") ? "tt" : "mwf";
+      }
+      markDirty();
+      renderMechPanel();
+    });
+  }
+
+  // ===== B-1 追加: 電気設備のイベント =====
+  document.querySelectorAll("#elecWeekTabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      currentElecWeek = Number(btn.dataset.eweek);
+      renderElecPanel();
+    });
+  });
+  document.querySelectorAll("#elecPartTabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      currentElecPart = Number(btn.dataset.epart);
+      renderElecPanel();
     });
   });
 

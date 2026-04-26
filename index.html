@@ -2297,6 +2297,31 @@ function ensureMechElecStructure() {
   }
 }
 
+// B-5 追加: mech/elec データに「実値」(null/空文字以外) が一つでもあるかチェック
+// ensureMechElecStructure 後は空でも全週/全曜日キーが揃うため、Object.keys だけでは判定不可
+function hasAnyEquipData(weekData) {
+  if (!weekData || typeof weekData !== "object") return false;
+  for (const w in weekData) {
+    const week = weekData[w];
+    if (!week || !week.days) continue;
+    for (const dk in week.days) {
+      const day = week.days[dk];
+      if (!day) continue;
+      for (const k in day) {
+        const v = day[k];
+        if (v !== null && v !== undefined && v !== "") return true;
+      }
+    }
+    // holidaySubstitutes に値があれば「実値あり」とみなす（運用判断記録）
+    if (week.holidaySubstitutes && Object.keys(week.holidaySubstitutes).length > 0) {
+      for (const orig in week.holidaySubstitutes) {
+        if (week.holidaySubstitutes[orig]) return true;
+      }
+    }
+  }
+  return false;
+}
+
 // ===== カレンダー連動 =====
 // 対象年月のカレンダー週構造を構築する。
 // - 各週は月〜日(Mon-Sun)で区切る（最初の日曜まで = Week 1）
@@ -2541,7 +2566,8 @@ async function uploadCurrentOnly() {
     // B-4 追加: 機械設備（月単位、全週まとめて送信）
     results.scope = '機械設備 第' + currentMechWeek + '週';
     const mechData = yoshiwaData.mech || {};
-    if (Object.keys(mechData).length > 0) {
+    // B-5 修正: ensureMechElecStructure 後は常にキー5個あるため、実値の有無で判定
+    if (hasAnyEquipData(mechData)) {
       const res = await fetchWithTimeout(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
@@ -2554,12 +2580,15 @@ async function uploadCurrentOnly() {
       const data = await res.json();
       if (data.error) throw new Error('機械設備: ' + data.error);
       results.saved += (data.saved || 0);
+    } else {
+      // 実値がない場合はサーバー送信をスキップ（既存サーバーデータの上書き保護）
+      console.log('[B-5] mech: 実値なし、サーバー送信スキップ');
     }
   } else if (currentMain === 'elec') {
     // B-4 追加: 電気設備（月単位、全週まとめて送信）
     results.scope = '電気設備 第' + currentElecWeek + '週';
     const elecData = yoshiwaData.elec || {};
-    if (Object.keys(elecData).length > 0) {
+    if (hasAnyEquipData(elecData)) {
       const res = await fetchWithTimeout(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
@@ -2572,6 +2601,8 @@ async function uploadCurrentOnly() {
       const data = await res.json();
       if (data.error) throw new Error('電気設備: ' + data.error);
       results.saved += (data.saved || 0);
+    } else {
+      console.log('[B-5] elec: 実値なし、サーバー送信スキップ');
     }
   }
 
@@ -3313,9 +3344,15 @@ function updateColDateHeaders(tableId, weekIdx, kind) {
               : (kind === "elec") ? yoshiwaData.elec[weekIdx] : null;
   const holidays = getHolidayDaysInWeek(weekIdx);
   const subs = (week && week.holidaySubstitutes) || {};
-  const subTargets = {};  // { "tue": "wed" } = 火が水の振替先
+  // B-5 修正: 複数の祝日が同じ振替先に集約されるケースに対応するため配列化
+  // { "thu": ["mon", "wed"] } = 木曜が月曜と水曜両方の振替先
+  const subTargets = {};
   Object.keys(subs).forEach(orig => {
-    if (subs[orig]) subTargets[subs[orig]] = orig;
+    const target = subs[orig];
+    if (target) {
+      if (!subTargets[target]) subTargets[target] = [];
+      subTargets[target].push(orig);
+    }
   });
 
   // 日付表示
@@ -3325,7 +3362,7 @@ function updateColDateHeaders(tableId, weekIdx, kind) {
     span.textContent = d ? (d.getMonth() + 1) + "/" + d.getDate() : "";
   });
 
-  // 祝日 / 振替先マーカー
+  // 祝日 / 振替先マーカー (動的に「×N日分」表示)
   document.querySelectorAll("#" + tableId + " thead .col-marker").forEach(span => {
     const dk = span.dataset.mday;
     let label = "";
@@ -3333,8 +3370,10 @@ function updateColDateHeaders(tableId, weekIdx, kind) {
     if (holidays.indexOf(dk) >= 0) {
       label = "祝日";
       cls += " marker-holiday";
-    } else if (subTargets[dk]) {
-      label = "×2日分";
+    } else if (subTargets[dk] && subTargets[dk].length > 0) {
+      // B-5 修正: 集約数 + 1 (= 自分の元の点検 + N回分の振替)
+      const count = subTargets[dk].length + 1;
+      label = "×" + count + "日分";
       cls += " marker-substitute";
     }
     span.textContent = label;
@@ -3372,10 +3411,14 @@ function buildEquipTableBody(kind, part, weekIdx) {
   const activeDays = getActiveDays(week, weekIdx);
   const holidays = getHolidayDaysInWeek(weekIdx);
   const subs = (week && week.holidaySubstitutes) || {};
-  // どの曜日が振替先か（逆引き）
-  const subTargets = {};  // { "tue": "wed" } = 火曜は水曜の振替先
+  // B-5 修正: 配列化（複数祝日が同じ曜日に集約されるケース対応）
+  const subTargets = {};  // { "thu": ["mon", "wed"] }
   Object.keys(subs).forEach(orig => {
-    if (subs[orig]) subTargets[subs[orig]] = orig;
+    const target = subs[orig];
+    if (target) {
+      if (!subTargets[target]) subTargets[target] = [];
+      subTargets[target].push(orig);
+    }
   });
 
   let html = "";
@@ -3392,7 +3435,7 @@ function buildEquipTableBody(kind, part, weekIdx) {
         const inMonth = !!date;
         const isHoliday = holidays.indexOf(dk) >= 0;
         const isActive = activeDays.indexOf(dk) >= 0;
-        const isSubTarget = !!subTargets[dk];  // 振替先
+        const isSubTarget = !!(subTargets[dk] && subTargets[dk].length > 0);  // 振替先（B-5: 配列化対応）
 
         // 列が活性かどうか
         const enabled = isActive && inMonth;
@@ -4381,6 +4424,38 @@ function duplicateWorksheet(wb, sourceName, newName) {
   // ページ設定
   if (src.pageSetup) {
     Object.assign(newWs.pageSetup, src.pageSetup);
+  }
+
+  // B-5 追加: ウィンドウ枠固定 (frozen panes)
+  if (src.views && src.views.length > 0) {
+    try {
+      newWs.views = JSON.parse(JSON.stringify(src.views));
+    } catch (e) {}
+  }
+
+  // B-5 追加: 条件付き書式コピー (元シートの175件規模に対応)
+  // ExcelJSの conditionalFormattings は配列。直接代入で複製可能。
+  if (src.conditionalFormattings && src.conditionalFormattings.length > 0) {
+    try {
+      newWs.conditionalFormattings = JSON.parse(JSON.stringify(src.conditionalFormattings));
+    } catch (e) {
+      // 失敗時は1件ずつ追加を試みる
+      try {
+        src.conditionalFormattings.forEach(cf => {
+          newWs.addConditionalFormatting(JSON.parse(JSON.stringify(cf)));
+        });
+      } catch (e2) {}
+    }
+  }
+
+  // B-5 追加: データ検証（プルダウン）コピー
+  if (src.dataValidations && src.dataValidations.model) {
+    try {
+      const dvModel = JSON.parse(JSON.stringify(src.dataValidations.model));
+      Object.keys(dvModel).forEach(range => {
+        try { newWs.dataValidations.add(range, dvModel[range]); } catch (e) {}
+      });
+    } catch (e) {}
   }
 
   return newWs;

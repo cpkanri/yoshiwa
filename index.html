@@ -301,12 +301,16 @@ header h1 {
 }
 .btn-copy { background: #e8f0f7; color: #1a4f8a; }
 .btn-clear { background: #ffebee; color: #c62828; }
-.btn-save { background: #1a4f8a; color: #fff; box-shadow: 0 2px 6px rgba(26,79,138,0.25); }
-.btn-save.unsaved { animation: pulse-save 1.5s infinite; }
+.btn-save { background: #1a4f8a; color: #fff; box-shadow: 0 2px 6px rgba(26,79,138,0.25); transition: background 0.2s; }
+.btn-save.unsaved {
+  background: #f57c00;  /* B-6: 未保存時はオレンジで強調 */
+  box-shadow: 0 2px 6px rgba(245,124,0,0.4);
+  animation: pulse-save 1.5s infinite;
+}
 .btn-excel { background: #2e7d32; color: #fff; box-shadow: 0 2px 6px rgba(46,125,50,0.25); flex: 1.2; }
 @keyframes pulse-save {
-  0%, 100% { box-shadow: 0 2px 6px rgba(26,79,138,0.25); }
-  50% { box-shadow: 0 2px 12px rgba(255,152,0,0.6); }
+  0%, 100% { box-shadow: 0 2px 6px rgba(245,124,0,0.4); }
+  50% { box-shadow: 0 2px 16px rgba(245,124,0,0.85); transform: scale(1.02); }
 }
 
 /* ===== トースト ===== */

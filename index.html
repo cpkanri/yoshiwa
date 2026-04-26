@@ -227,6 +227,10 @@ header h1 {
 .field input[type="text"] {
   text-align: left;
 }
+/* B-6: 流量計など inputmode=decimal の text input は数値扱いなので右詰め */
+.field input[type="text"][inputmode="decimal"] {
+  text-align: right;
+}
 .field input:focus {
   outline: none;
   border-color: #1a4f8a;

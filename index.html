@@ -5211,6 +5211,43 @@ async function exportExcel() {
       });
     } catch (e) { console.warn("シート名リネーム失敗:", e); }
 
+    // B-6 追加: 機械・電気設備シートで長い項目名がセルからはみ出さないよう shrinkToFit を有効化
+    try {
+      const shrinkSheets = ["日常機械設備", "日常電気設備", "月例機械設備", "月例電気設備"];
+      shrinkSheets.forEach(name => {
+        const ws = wb.getWorksheet(name);
+        if (!ws) return;
+        ws.eachRow({ includeEmpty: false }, row => {
+          row.eachCell({ includeEmpty: false }, cell => {
+            if (cell.value === null || cell.value === undefined) return;
+            const align = cell.alignment || {};
+            // wrapText が true のセルは shrinkToFit 設定不可なので除外
+            if (align.wrapText) return;
+            cell.alignment = Object.assign({}, align, { shrinkToFit: true });
+          });
+        });
+      });
+    } catch (e) { console.warn("shrinkToFit 設定失敗:", e); }
+
+    // B-6 追加: 電気設備テンプレに残った余分な K1=0 をクリア（各週ブロック分）
+    try {
+      const wsElec = wb.getWorksheet("日常電気設備");
+      if (wsElec) {
+        const ROWS_PER_BLOCK_ELEC = 106;
+        for (let week = 0; week < 5; week++) {
+          const r = 1 + week * ROWS_PER_BLOCK_ELEC;
+          // B〜Q列 (2〜17)、A列タイトルは残す
+          for (let c = 2; c <= 17; c++) {
+            const cell = wsElec.getCell(r, c);
+            // 数値の余分な値（0など）をクリア。タイトル等の文字列は残す
+            if (cell.value !== null && cell.value !== undefined && typeof cell.value !== "string") {
+              cell.value = null;
+            }
+          }
+        }
+      }
+    } catch (e) { console.warn("電気設備 Row 1 クリア失敗:", e); }
+
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);

@@ -1729,29 +1729,29 @@ const MECH_SECTIONS = [
     { key: "returnSludgePump1_1_current", row: 46, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "returnSludgePump1_1_pressure", row: 47, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "returnSludgePump1_1_vibration", row: 48, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "returnSludgePump1_1_mode", row: 52, label: "モード確認", type: "toggle", options: ["自動","手動"] },
-    { key: "returnSludgePump1_1_priority", row: 53, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 1, title: "返送汚泥ポンプ No.1-2", fields: [
     { key: "returnSludgePump1_2_current", row: 49, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "returnSludgePump1_2_pressure", row: 50, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "returnSludgePump1_2_vibration", row: 51, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "returnSludgePump1_2_mode", row: 52, label: "モード確認", type: "toggle", options: ["自動","手動"] },
-    { key: "returnSludgePump1_2_priority", row: 53, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
+  ]},
+  { part: 1, title: "返送汚泥ポンプ No.1系共通", fields: [
+    { key: "returnSludgePump1Common_mode", row: 52, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "returnSludgePump1Common_priority", row: 53, label: "常用機選択", type: "toggle", options: ["No.1-1","No.1-2"] },
   ]},
   { part: 1, title: "返送汚泥ポンプ No.2-1", fields: [
     { key: "returnSludgePump2_1_current", row: 54, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "returnSludgePump2_1_pressure", row: 55, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "returnSludgePump2_1_vibration", row: 56, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "returnSludgePump2_1_mode", row: 60, label: "モード確認", type: "toggle", options: ["自動","手動"] },
-    { key: "returnSludgePump2_1_priority", row: 61, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 1, title: "返送汚泥ポンプ No.2-2", fields: [
     { key: "returnSludgePump2_2_current", row: 57, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "returnSludgePump2_2_pressure", row: 58, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "returnSludgePump2_2_vibration", row: 59, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "returnSludgePump2_2_mode", row: 60, label: "モード確認", type: "toggle", options: ["自動","手動"] },
-    { key: "returnSludgePump2_2_priority", row: 61, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
+  ]},
+  { part: 1, title: "返送汚泥ポンプ No.2系共通", fields: [
+    { key: "returnSludgePump2Common_mode", row: 60, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "returnSludgePump2Common_priority", row: 61, label: "常用機選択", type: "toggle", options: ["No.2-1","No.2-2"] },
   ]},
 
   // ── パート2: 機械設備日常点検表 (2/3) ──
@@ -1778,29 +1778,29 @@ const MECH_SECTIONS = [
     { key: "returnFlowPump1_1_current", row: 79, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "returnFlowPump1_1_pressure", row: 80, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "returnFlowPump1_1_vibration", row: 81, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "returnFlowPump1_1_mode", row: 85, label: "モード確認", type: "toggle", options: ["自動","手動"] },
-    { key: "returnFlowPump1_1_priority", row: 86, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 2, title: "返流水ポンプ No.1-2", fields: [
     { key: "returnFlowPump1_2_current", row: 82, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "returnFlowPump1_2_pressure", row: 83, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "returnFlowPump1_2_vibration", row: 84, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "returnFlowPump1_2_mode", row: 85, label: "モード確認", type: "toggle", options: ["自動","手動"] },
-    { key: "returnFlowPump1_2_priority", row: 86, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
+  ]},
+  { part: 2, title: "返流水ポンプ No.1系共通", fields: [
+    { key: "returnFlowPump1Common_mode", row: 85, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "returnFlowPump1Common_priority", row: 86, label: "常用機選択", type: "toggle", options: ["No.1-1","No.1-2"] },
   ]},
   { part: 2, title: "返流水ポンプ No.2-1", fields: [
     { key: "returnFlowPump2_1_current", row: 87, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "returnFlowPump2_1_pressure", row: 88, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "returnFlowPump2_1_vibration", row: 89, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "returnFlowPump2_1_mode", row: 93, label: "モード確認", type: "toggle", options: ["自動","手動"] },
-    { key: "returnFlowPump2_1_priority", row: 94, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 2, title: "返流水ポンプ No.2-2", fields: [
     { key: "returnFlowPump2_2_current", row: 90, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "returnFlowPump2_2_pressure", row: 91, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "returnFlowPump2_2_vibration", row: 92, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "returnFlowPump2_2_mode", row: 93, label: "モード確認", type: "toggle", options: ["自動","手動"] },
-    { key: "returnFlowPump2_2_priority", row: 94, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
+  ]},
+  { part: 2, title: "返流水ポンプ No.2系共通", fields: [
+    { key: "returnFlowPump2Common_mode", row: 93, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "returnFlowPump2Common_priority", row: 94, label: "常用機選択", type: "toggle", options: ["No.2-1","No.2-2"] },
   ]},
   { part: 2, title: "濃縮汚泥引抜ポンプ No.1", fields: [
     { key: "thickSludgePump1_current", row: 95, label: "電流値", type: "number", step: "0.1", unit: "A" },

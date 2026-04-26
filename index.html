@@ -5056,14 +5056,14 @@ function rebuildElecFormulas(ws, rowOffset, N) {
     for (let c = COL_START; c <= COL_END; c++) {
       ws.getCell(r, c).value = null;
     }
-    // N列分の数式を構築
+    // N列分の数式を構築（B-6: IFERROR でラップして「-」混入時の #VALUE! を回避）
     for (let i = 0; i < N; i++) {
       const col = COL_START + i;
       const colL = colLetter(col);
-      const formula = (i === 0)
+      const baseFormula = (i === 0)
         ? `${colL}${dr}-Q${dr}`
         : `${colL}${dr}-${colLetter(col - 1)}${dr}`;
-      ws.getCell(r, col).value = { formula: formula };
+      ws.getCell(r, col).value = { formula: `IFERROR(${baseFormula},"")` };
     }
   });
 
@@ -5212,16 +5212,33 @@ async function exportExcel() {
     } catch (e) { console.warn("シート名リネーム失敗:", e); }
 
     // B-6 追加: 機械・電気設備シートで長い項目名がセルからはみ出さないよう shrinkToFit を有効化
+    // (注) 結合セルやタイトル行 (Row 1, 各週ブロック先頭) は除外。結合セルでは shrinkToFit が機能せず
+    // タイトル文字が極端に縮小されて見えなくなる問題があるため。
     try {
-      const shrinkSheets = ["日常機械設備", "日常電気設備", "月例機械設備", "月例電気設備"];
-      shrinkSheets.forEach(name => {
-        const ws = wb.getWorksheet(name);
+      const shrinkConfig = [
+        { name: "日常機械設備", blockSize: 188 },
+        { name: "日常電気設備", blockSize: 106 },
+        { name: "月例機械設備", blockSize: 0 },  // 単一ブロック
+        { name: "月例電気設備", blockSize: 0 },
+      ];
+      shrinkConfig.forEach(cfg => {
+        const ws = wb.getWorksheet(cfg.name);
         if (!ws) return;
-        ws.eachRow({ includeEmpty: false }, row => {
+        ws.eachRow({ includeEmpty: false }, (row, rowNum) => {
+          // 各週ブロックの先頭3行（タイトル、点検者、点検内容）はスキップ
+          if (cfg.blockSize > 0) {
+            const inBlockRow = ((rowNum - 1) % cfg.blockSize) + 1;
+            if (inBlockRow <= 3) return;
+          } else {
+            if (rowNum <= 3) return;
+          }
           row.eachCell({ includeEmpty: false }, cell => {
             if (cell.value === null || cell.value === undefined) return;
+            // 結合セルは shrinkToFit が機能しないので除外
+            if (cell.master && cell.master !== cell) return;
+            // 結合の主セルでも、結合範囲があれば shrinkToFit は不要（結合幅で表示される）
+            if (cell.isMerged) return;
             const align = cell.alignment || {};
-            // wrapText が true のセルは shrinkToFit 設定不可なので除外
             if (align.wrapText) return;
             cell.alignment = Object.assign({}, align, { shrinkToFit: true });
           });

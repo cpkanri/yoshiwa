@@ -227,9 +227,12 @@ header h1 {
 .field input[type="text"] {
   text-align: left;
 }
-/* B-6: 流量計など inputmode=decimal の text input は数値扱いなので右詰め */
+/* B-6: 流量計など inputmode=decimal の text input は数値扱いなので右詰め＋軽油欄と padding 統一 */
 .field input[type="text"][inputmode="decimal"] {
   text-align: right;
+  padding: 8px 12px;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .field input:focus {
   outline: none;

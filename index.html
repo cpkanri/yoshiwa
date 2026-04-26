@@ -1626,8 +1626,8 @@ const MECH_SECTIONS = [
     { key: "sewagePump2_vibration", row: 10, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
   ]},
   { part: 1, title: "汚水ポンプ", fields: [
-    { key: "sewagePump_mode", row: 11, label: "モード確認", type: "toggle", options: ["○","△","×"] },
-    { key: "sewagePump_priority", row: 12, label: "先行機選択", type: "toggle", options: ["○","△","×"] },
+    { key: "sewagePump_mode", row: 11, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "sewagePump_priority", row: 12, label: "先行機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 1, title: "自動除塵機", fields: [
     { key: "autoScreen_hydraulic", row: 13, label: "油圧圧力", type: "number", step: "0.01", unit: "Mpa" },
@@ -1638,22 +1638,22 @@ const MECH_SECTIONS = [
   { part: 1, title: "エアレーション装置 No.1-1", fields: [
     { key: "aeration1_1_current", row: 17, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "aeration1_1_vibration", row: 18, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "aeration1_1_mode", row: 19, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "aeration1_1_mode", row: 19, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 1, title: "エアレーション装置 No.1-2", fields: [
     { key: "aeration1_2_current", row: 20, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "aeration1_2_vibration", row: 21, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "aeration1_2_mode", row: 22, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "aeration1_2_mode", row: 22, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 1, title: "エアレーション装置 No.2-1", fields: [
     { key: "aeration2_1_current", row: 23, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "aeration2_1_vibration", row: 24, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "aeration2_1_mode", row: 25, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "aeration2_1_mode", row: 25, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 1, title: "エアレーション装置 No.2-2", fields: [
     { key: "aeration2_2_current", row: 26, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "aeration2_2_vibration", row: 27, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "aeration2_2_mode", row: 28, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "aeration2_2_mode", row: 28, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 1, title: "消泡装置", fields: [
     { key: "defoam_nozzle", row: 29, label: "消泡ノズル", type: "toggle", options: ["○","△","×"] },
@@ -1707,8 +1707,8 @@ const MECH_SECTIONS = [
     { key: "returnSludgePump1_2_vibration", row: 51, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
   ]},
   { part: 1, title: "返送汚泥ポンプ No.1系共通", fields: [
-    { key: "returnSludgePump1Common_mode", row: 52, label: "モード確認", type: "toggle", options: ["○","△","×"] },
-    { key: "returnSludgePump1Common_priority", row: 53, label: "常用機選択", type: "toggle", options: ["○","△","×"] },
+    { key: "returnSludgePump1Common_mode", row: 52, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "returnSludgePump1Common_priority", row: 53, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 1, title: "返送汚泥ポンプ No.2-1", fields: [
     { key: "returnSludgePump2_1_current", row: 54, label: "電流値", type: "number", step: "0.1", unit: "A" },
@@ -1721,8 +1721,8 @@ const MECH_SECTIONS = [
     { key: "returnSludgePump2_2_vibration", row: 59, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
   ]},
   { part: 1, title: "返送汚泥ポンプ No.2系共通", fields: [
-    { key: "returnSludgePump2Common_mode", row: 60, label: "モード確認", type: "toggle", options: ["○","△","×"] },
-    { key: "returnSludgePump2Common_priority", row: 61, label: "常用機選択", type: "toggle", options: ["○","△","×"] },
+    { key: "returnSludgePump2Common_mode", row: 60, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "returnSludgePump2Common_priority", row: 61, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
   ]},
 
   // ── パート2: 機械設備日常点検表 (2/3) ──
@@ -1731,19 +1731,19 @@ const MECH_SECTIONS = [
     { key: "excessSludgePump1_pressure", row: 67, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "excessSludgePump1_vibration", row: 68, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
     { key: "excessSludgePump1_leak", row: 69, label: "液漏れ", type: "toggle", options: ["○","△","×"] },
-    { key: "excessSludgePump1_mode", row: 70, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "excessSludgePump1_mode", row: 70, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 2, title: "余剰汚泥ポンプ No.2", fields: [
     { key: "excessSludgePump2_current", row: 71, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "excessSludgePump2_pressure", row: 72, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "excessSludgePump2_vibration", row: 73, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
     { key: "excessSludgePump2_leak", row: 74, label: "液漏れ", type: "toggle", options: ["○","△","×"] },
-    { key: "excessSludgePump2_mode", row: 75, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "excessSludgePump2_mode", row: 75, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 2, title: "終沈床排水ポンプ", fields: [
     { key: "finalDrainPump_pressure", row: 76, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "finalDrainPump_vibration", row: 77, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "finalDrainPump_mode", row: 78, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "finalDrainPump_mode", row: 78, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 2, title: "返流水ポンプ No.1-1", fields: [
     { key: "returnFlowPump1_1_current", row: 79, label: "電流値", type: "number", step: "0.1", unit: "A" },
@@ -1756,8 +1756,8 @@ const MECH_SECTIONS = [
     { key: "returnFlowPump1_2_vibration", row: 84, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
   ]},
   { part: 2, title: "返流水ポンプ No.1系共通", fields: [
-    { key: "returnFlowPump1Common_mode", row: 85, label: "モード確認", type: "toggle", options: ["○","△","×"] },
-    { key: "returnFlowPump1Common_priority", row: 86, label: "常用機選択", type: "toggle", options: ["○","△","×"] },
+    { key: "returnFlowPump1Common_mode", row: 85, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "returnFlowPump1Common_priority", row: 86, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 2, title: "返流水ポンプ No.2-1", fields: [
     { key: "returnFlowPump2_1_current", row: 87, label: "電流値", type: "number", step: "0.1", unit: "A" },
@@ -1770,8 +1770,8 @@ const MECH_SECTIONS = [
     { key: "returnFlowPump2_2_vibration", row: 92, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
   ]},
   { part: 2, title: "返流水ポンプ No.2系共通", fields: [
-    { key: "returnFlowPump2Common_mode", row: 93, label: "モード確認", type: "toggle", options: ["○","△","×"] },
-    { key: "returnFlowPump2Common_priority", row: 94, label: "常用機選択", type: "toggle", options: ["○","△","×"] },
+    { key: "returnFlowPump2Common_mode", row: 93, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "returnFlowPump2Common_priority", row: 94, label: "常用機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 2, title: "濃縮汚泥引抜ポンプ No.1", fields: [
     { key: "thickSludgePump1_current", row: 95, label: "電流値", type: "number", step: "0.1", unit: "A" },
@@ -1784,13 +1784,13 @@ const MECH_SECTIONS = [
     { key: "thickSludgePump2_vibration", row: 100, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
   ]},
   { part: 2, title: "濃縮汚泥引抜ポンプ", fields: [
-    { key: "thickSludgePump_mode", row: 101, label: "モード確認", type: "toggle", options: ["○","△","×"] },
-    { key: "thickSludgePump_priority", row: 102, label: "先行機選択", type: "toggle", options: ["○","△","×"] },
+    { key: "thickSludgePump_mode", row: 101, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "thickSludgePump_priority", row: 102, label: "先行機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 2, title: "汚泥Ｐ室床排水ポンプ", fields: [
     { key: "sludgePumpRoomDrain_pressure", row: 103, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "sludgePumpRoomDrain_vibration", row: 104, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "sludgePumpRoomDrain_priority", row: 105, label: "先行機選択", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgePumpRoomDrain_priority", row: 105, label: "先行機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 2, title: "濃縮汚泥掻寄機", fields: [
     { key: "thickScraper_vibration", row: 106, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
@@ -1811,12 +1811,12 @@ const MECH_SECTIONS = [
   { part: 2, title: "汚泥貯留槽攪拌機", fields: [
     { key: "sludgeTankStirrer_current", row: 114, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "sludgeTankStirrer_vibration", row: 115, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "sludgeTankStirrer_mode", row: 116, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgeTankStirrer_mode", row: 116, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 2, title: "配管ピットポンプ", fields: [
     { key: "pipePitPump_pressure", row: 117, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "pipePitPump_vibration", row: 118, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "pipePitPump_mode", row: 119, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "pipePitPump_mode", row: 119, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 2, title: "空気圧縮機", fields: [
     { key: "airCompressor_vibration", row: 120, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
@@ -1828,7 +1828,7 @@ const MECH_SECTIONS = [
     { key: "wellPump_current", row: 128, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "wellPump_pressure", row: 129, label: "吐出圧力", type: "number", step: "0.01", unit: "Mpa" },
     { key: "wellPump_vibration", row: 130, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
-    { key: "wellPump_mode", row: 131, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "wellPump_mode", row: 131, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "自動給水装置 No.1", fields: [
     { key: "autoWaterSupply1_current", row: 132, label: "電流値", type: "number", step: "0.1", unit: "A" },
@@ -1839,8 +1839,8 @@ const MECH_SECTIONS = [
     { key: "autoWaterSupply2_vibration", row: 135, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
   ]},
   { part: 3, title: "自動給水装置", fields: [
-    { key: "autoWaterSupply_mode", row: 136, label: "モード確認", type: "toggle", options: ["○","△","×"] },
-    { key: "autoWaterSupply_priority", row: 137, label: "先行機選択", type: "toggle", options: ["○","△","×"] },
+    { key: "autoWaterSupply_mode", row: 136, label: "モード確認", type: "toggle", options: ["自動","手動"] },
+    { key: "autoWaterSupply_priority", row: 137, label: "先行機選択", type: "toggle", options: ["№1","№2"] },
   ]},
   { part: 3, title: "井水貯留槽", fields: [
     { key: "wellTank_waterLeak", row: 138, label: "水漏れ", type: "toggle", options: ["○","△","×"] },
@@ -1854,7 +1854,7 @@ const MECH_SECTIONS = [
   { part: 3, title: "臭気ガス吸引装置", fields: [
     { key: "odorGasFan_current", row: 141, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "odorGasFan_boltLoose", row: 142, label: "ボルト・ナットの緩み", type: "toggle", options: ["○","△","×"] },
-    { key: "odorGasFan_mode", row: 143, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "odorGasFan_mode", row: 143, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "吸着脱装置", fields: [
     { key: "adsorbent_manometer", row: 144, label: "マノメータ等の作動確認", type: "toggle", options: ["○","△","×"] },
@@ -1863,50 +1863,50 @@ const MECH_SECTIONS = [
   { part: 3, title: "電気室給気ファン", fields: [
     { key: "elecRoomSupply_current", row: 146, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "elecRoomSupply_vibration", row: 147, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
-    { key: "elecRoomSupply_mode", row: 148, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "elecRoomSupply_mode", row: 148, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "電気室排気ファン", fields: [
     { key: "elecRoomExhaust_current", row: 149, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "elecRoomExhaust_vibration", row: 150, label: "異音、振動等", type: "toggle", options: ["○","△","×"] },
-    { key: "elecRoomExhaust_mode", row: 151, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "elecRoomExhaust_mode", row: 151, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "自家発室給気ファン", fields: [
     { key: "genRoomSupply_vibration", row: 152, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "genRoomSupply_mode", row: 153, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "genRoomSupply_mode", row: 153, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "自家発室排気ファン", fields: [
     { key: "genRoomExhaust_vibration", row: 154, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "genRoomExhaust_mode", row: 155, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "genRoomExhaust_mode", row: 155, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "終沈ポンプ室ルーフファン", fields: [
     { key: "finalRoofFan_vibration", row: 156, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "finalRoofFan_mode", row: 157, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "finalRoofFan_mode", row: 157, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "終沈ポンプ室換気扇", fields: [
     { key: "finalVentFan_vibration", row: 158, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "finalVentFan_mode", row: 159, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "finalVentFan_mode", row: 159, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "汚泥ポンプ室給気ファン", fields: [
     { key: "sludgeRoomSupply_vibration", row: 160, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "sludgeRoomSupply_mode", row: 161, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgeRoomSupply_mode", row: 161, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "汚泥ポンプ室排気ファン", fields: [
     { key: "sludgeRoomExhaust_vibration", row: 162, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "sludgeRoomExhaust_mode", row: 163, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "sludgeRoomExhaust_mode", row: 163, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "脱水機室給気ファン", fields: [
     { key: "dehydrateSupply_vibration", row: 164, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "dehydrateSupply_mode", row: 165, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "dehydrateSupply_mode", row: 165, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "脱水機室排気ファン", fields: [
     { key: "dehydrateExhaust_vibration", row: 166, label: "異音、振動", type: "toggle", options: ["○","△","×"] },
-    { key: "dehydrateExhaust_mode", row: 167, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "dehydrateExhaust_mode", row: 167, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
   { part: 3, title: "自家発室自動巻取型エアフィルター", fields: [
     { key: "autoAirFilter_current", row: 168, label: "電流値", type: "number", step: "0.1", unit: "A" },
     { key: "autoAirFilter_rollComplete", row: 169, label: "巻取完了表示点灯確認", type: "toggle", options: ["○","△","×"] },
     { key: "autoAirFilter_pressureDiff", row: 170, label: "差圧", type: "number", step: "0.01", unit: "Pa" },
-    { key: "autoAirFilter_mode", row: 171, label: "モード確認", type: "toggle", options: ["○","△","×"] },
+    { key: "autoAirFilter_mode", row: 171, label: "モード確認", type: "toggle", options: ["自動","手動"] },
   ]},
 ];
 

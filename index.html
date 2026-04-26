@@ -3562,20 +3562,17 @@ function saveEquipFormToData(kind) {
 
     if (el.tagName === "INPUT") {
       if (el.type === "number") {
-        if (el.value === "") {
-          week.days[day][key] = null;
-        } else {
-          const num = Number(el.value);
-          week.days[day][key] = isNaN(num) ? el.value : num;
-        }
+        // B-6 修正: 入力文字列のまま保存（"13.0" を "13" に丸めない）
+        const v = (el.value || "").trim();
+        week.days[day][key] = (v === "") ? null : v;
       } else if (el.type === "text") {
         // 流量計など「-」許容
         const v = (el.value || "").trim();
         if (v === "" || v === "-") {
           week.days[day][key] = (v === "-") ? "-" : null;
         } else {
-          const num = Number(v);
-          week.days[day][key] = isNaN(num) ? v : num;
+          // B-6 修正: 文字列のまま保存（小数点以下桁数を保持）
+          week.days[day][key] = v;
         }
       }
     } else if (el.tagName === "BUTTON" && el.classList.contains("toggle-btn")) {
@@ -4356,11 +4353,22 @@ function setCell(ws, row, col, val) {
   const num = Number(val);
   if (!isNaN(num) && val !== "" && typeof val !== "boolean") {
     cell.value = num;
-    // テンプレートの書式が 0.000 等の場合に、入力通りの表示にするため General に変更
-    // ただし日付書式(m/d 等) や文字列書式は触らない
-    const currentFmt = cell.numFmt || '';
-    if (currentFmt.includes('0.') || currentFmt === '0.000' || currentFmt === '0.00') {
-      cell.numFmt = 'General';
+    // B-6 修正: 入力文字列の小数点以下桁数を numFmt に反映
+    // "13.0" → "0.0", "0.123" → "0.000", "13" → General
+    if (typeof val === "string" && val.indexOf(".") >= 0) {
+      const parts = val.split(".");
+      const decimals = (parts[1] || "").length;
+      if (decimals > 0) {
+        cell.numFmt = "0." + "0".repeat(decimals);
+      } else {
+        cell.numFmt = "General";
+      }
+    } else {
+      // 整数 or 数値型はテンプレ書式を General に
+      const currentFmt = cell.numFmt || '';
+      if (currentFmt.includes('0.') || currentFmt === '0.000' || currentFmt === '0.00') {
+        cell.numFmt = 'General';
+      }
     }
   } else {
     cell.value = val;
@@ -4508,6 +4516,47 @@ function getPrevMonthLastElecData() {
 // B-3 追加: 機械設備シートの埋め込み
 // 元の「日常機械設備」シートを 第1〜第5週 にコピー、各週のデータを書き込み
 // =====================================================
+// B-6 追加: 令和形式の年月文字列に変換 ("2026-04" → "令和8年4月")
+function formatEraMonth(targetMonth) {
+  if (!targetMonth || !/^\d{4}-\d{2}$/.test(targetMonth)) return "";
+  const [y, m] = targetMonth.split("-").map(Number);
+  // 令和: 2019-05-01 から (西暦 - 2018 = 令和年)
+  const reiwa = y - 2018;
+  if (reiwa >= 1) return `令和${reiwa}年${m}月`;
+  return `${y}年${m}月`;
+}
+
+// B-6 追加: 指定週の日付範囲を文字列で ("4/6-4/10" 形式)
+function getWeekDateRangeStr(weekIdx) {
+  const ws = monthWeeks[weekIdx - 1];
+  if (!ws) return "";
+  const dates = [1,2,3,4,5].map(d => ws[d]).filter(d => d);
+  if (dates.length === 0) return "";
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  if (first.getTime() === last.getTime()) {
+    return `${first.getMonth()+1}/${first.getDate()}`;
+  }
+  return `${first.getMonth()+1}/${first.getDate()}-${last.getMonth()+1}/${last.getDate()}`;
+}
+
+// B-6 追加: 1ブロックの行数を計算（結合セル領域の最終行を考慮）
+// テンプレ A173:I186 のような大きな結合領域がブロック境界を跨ぐと
+// 縦結合時に結合内の最後の値が全体に反映されてしまうため、結合終端を含めた行数を返す
+function getBlockRowCount(ws) {
+  let maxRow = ws.actualRowCount;
+  if (ws.model && ws.model.merges) {
+    ws.model.merges.forEach(merge => {
+      const m = merge.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+      if (m) {
+        const r2 = parseInt(m[4]);
+        if (r2 > maxRow) maxRow = r2;
+      }
+    });
+  }
+  return maxRow + 2;  // 余裕2行
+}
+
 function fillMechSheet(wb) {
   const SOURCE_NAME = "日常機械設備";
   const src = wb.getWorksheet(SOURCE_NAME);
@@ -4534,8 +4583,8 @@ function fillMechSheet(wb) {
   }
 
   // B-6 修正: 週ごとに別シートではなく、1シート内に縦に積む方式
-  // 元テンプレ最終データ行を測定
-  const ROWS_PER_BLOCK = src.actualRowCount;  // テンプレの 1ブロック分行数
+  // 結合セル領域(例: A173:I186)を跨がないよう、結合最終行+2 をブロック単位とする
+  const ROWS_PER_BLOCK = getBlockRowCount(src);
 
   // 第1週は元テンプレ位置 (1〜ROWS_PER_BLOCK 行目) に書き込み
   fillMechWeekBlock(src, activeWeeks[0], 0);
@@ -4609,27 +4658,61 @@ function shiftFormulaRows(formula, offset, srcStartRow, srcEndRow) {
 }
 
 // 1週分のデータを機械設備シートの指定行オフセットに書き込む (B-6 修正)
+// データのある活性日のみ左詰めで書き込み（曜日固定の列割り当てをやめる）
 function fillMechWeekBlock(ws, weekIdx, rowOffset) {
   const week = yoshiwaData.mech[weekIdx];
   if (!week || !week.days) return;
 
-  // 機械設備のテンプレ列構造は E〜I (5〜9) = 月〜金
-  const DAY_COL = { mon: 5, tue: 6, wed: 7, thu: 8, fri: 9 };
-  const activeDays = getActiveDays(week, weekIdx);
+  const DAY_LABELS = { mon: "月", tue: "火", wed: "水", thu: "木", fri: "金" };
+  const COL_START = 5;  // E列
+  const COL_END = 9;    // I列
 
-  const writeColMap = {};
-  EQUIP_DAYS.forEach(dk => {
-    if (activeDays.indexOf(dk) >= 0) writeColMap[dk] = DAY_COL[dk];
+  // 月内かつ実値がある活性日のみ抽出（順序保持）
+  const activeDays = getActiveDays(week, weekIdx);
+  const inMonthActiveDays = activeDays.filter(dk => {
+    if (!getDateForDayKey(weekIdx, dk)) return false;
+    const day = week.days[dk] || {};
+    for (const k in day) {
+      const v = day[k];
+      if (v !== null && v !== undefined && v !== "") return true;
+    }
+    return false;
   });
 
+  // タイトル行 + ヘッダー
+  // (Row 1 タイトルはテンプレ「機械設備日常点検表（１/３）」のまま、追記しない)
+  // Row 2 = 点検者欄 (空のまま)、Row 3 = 点検内容欄 → ここに日付を書く
+  try {
+    // E〜I をクリア (Row 2: 点検者欄, Row 3: 日付+曜日)
+    for (let c = COL_START; c <= COL_END; c++) {
+      ws.getCell(2 + rowOffset, c).value = null;
+      ws.getCell(3 + rowOffset, c).value = null;
+    }
+
+    // Row 3 (点検内容欄) に「{日}日({曜})」形式の日付ヘッダーを左詰めで書き込み
+    inMonthActiveDays.forEach((dk, i) => {
+      const col = COL_START + i;
+      const date = getDateForDayKey(weekIdx, dk);
+      if (date) {
+        setCell(ws, 3 + rowOffset, col, `${date.getDate()}日(${DAY_LABELS[dk]})`);
+      }
+    });
+  } catch (e) {}
+
+  // データ書き込み（左詰め）
   MECH_SECTIONS.forEach(sec => {
     sec.fields.forEach(f => {
-      EQUIP_DAYS.forEach(dk => {
-        const col = writeColMap[dk];
-        if (!col) return;
+      // E〜I を全てクリア (前週コピー値消去)
+      for (let c = COL_START; c <= COL_END; c++) {
+        ws.getCell(f.row + rowOffset, c).value = null;
+      }
+      // 入力日のみ左から順に書き込み
+      inMonthActiveDays.forEach((dk, i) => {
+        const col = COL_START + i;
         const val = week.days[dk][f.key];
-        if (val === null || val === undefined || val === "") return;
-        setCell(ws, f.row + rowOffset, col, val);  // rowOffset 加算
+        if (val !== null && val !== undefined && val !== "") {
+          setCell(ws, f.row + rowOffset, col, val);
+        }
       });
     });
   });
@@ -4663,8 +4746,8 @@ function fillElecSheet(wb) {
 
   if (activeWeeks.length === 0) return;
 
-  // B-6 修正: 1シート内に縦に積む方式
-  const ROWS_PER_BLOCK = src.actualRowCount;
+  // B-6 修正: 1シート内に縦に積む方式（結合セル領域考慮）
+  const ROWS_PER_BLOCK = getBlockRowCount(src);
 
   // 第1週の Q列用: 前月最終日データ
   let prevDayDataForWeek = getPrevMonthLastElecData();
@@ -4694,32 +4777,128 @@ function getLastActiveDayElecData(weekIdx) {
 }
 
 // 1週分のデータを電気設備シートの指定行オフセットに書き込む (B-6 修正)
+// データのある活性日のみ左詰めで書き込み（曜日固定の列割り当てをやめる）
 function fillElecWeekBlock(ws, weekIdx, prevDayData, rowOffset) {
   const week = yoshiwaData.elec[weekIdx];
   if (!week || !week.days) return;
 
-  const DAY_COL = { mon: 7, tue: 8, wed: 9, thu: 10, fri: 11 };
-  const PREV_COL = 17;  // Q列
-  const activeDays = getActiveDays(week, weekIdx);
+  const DAY_LABELS = { mon: "月", tue: "火", wed: "水", thu: "木", fri: "金" };
+  const COL_START = 7;   // G列
+  const COL_END = 11;    // K列
+  const PREV_COL = 17;   // Q列
 
-  const writeColMap = {};
-  EQUIP_DAYS.forEach(dk => {
-    if (activeDays.indexOf(dk) >= 0) writeColMap[dk] = DAY_COL[dk];
+  // 月内かつ実値がある活性日のみ抽出（順序保持）
+  const activeDays = getActiveDays(week, weekIdx);
+  const inMonthActiveDays = activeDays.filter(dk => {
+    if (!getDateForDayKey(weekIdx, dk)) return false;
+    const day = week.days[dk] || {};
+    for (const k in day) {
+      const v = day[k];
+      if (v !== null && v !== undefined && v !== "") return true;
+    }
+    return false;
   });
 
+  // タイトル + 日付 + 前週末ヘッダー
+  // (Row 1 タイトルはテンプレ「電気設備日常点検（１/３）」のまま、追記しない)
+  try {
+    // G〜K, Q をクリア
+    for (let c = COL_START; c <= COL_END; c++) {
+      ws.getCell(2 + rowOffset, c).value = null;
+    }
+    ws.getCell(2 + rowOffset, PREV_COL).value = null;
+
+    // 左詰めで「{日}日({曜})」形式の日付ヘッダーを書き込み
+    inMonthActiveDays.forEach((dk, i) => {
+      const col = COL_START + i;
+      const date = getDateForDayKey(weekIdx, dk);
+      if (date) {
+        setCell(ws, 2 + rowOffset, col, `${date.getDate()}日(${DAY_LABELS[dk]})`);
+      }
+    });
+    // Q列 ヘッダー
+    setCell(ws, 2 + rowOffset, PREV_COL, "前週末");
+  } catch (e) {}
+
+  // データ書き込み（左詰め）
   ELEC_SECTIONS.forEach(sec => {
     sec.fields.forEach(f => {
-      EQUIP_DAYS.forEach(dk => {
-        const col = writeColMap[dk];
-        if (!col) return;
+      // G〜K と Q をクリア
+      for (let c = COL_START; c <= COL_END; c++) {
+        ws.getCell(f.row + rowOffset, c).value = null;
+      }
+      ws.getCell(f.row + rowOffset, PREV_COL).value = null;
+
+      // 左詰めで書き込み
+      inMonthActiveDays.forEach((dk, i) => {
+        const col = COL_START + i;
         const val = week.days[dk][f.key];
-        if (val === null || val === undefined || val === "") return;
-        setCell(ws, f.row + rowOffset, col, val);
+        if (val !== null && val !== undefined && val !== "") {
+          setCell(ws, f.row + rowOffset, col, val);
+        }
       });
+
+      // Q列: 前週末データ
       if (prevDayData && prevDayData[f.key] !== undefined && prevDayData[f.key] !== null && prevDayData[f.key] !== "") {
         setCell(ws, f.row + rowOffset, PREV_COL, prevDayData[f.key]);
       }
     });
+  });
+
+  // B-6 追加: テンプレ数式行を「使用列数N」に応じて再構築
+  // 各週のデータ列数が違っても正しく動作するように、毎週リビルド
+  rebuildElecFormulas(ws, rowOffset, inMonthActiveDays.length);
+}
+
+// 電気設備 数式行の再構築（左詰め N 列分）
+function rebuildElecFormulas(ws, rowOffset, N) {
+  const COL_START = 7;
+  const COL_END = 11;
+  const colLetter = c => String.fromCharCode(64 + c);
+
+  // 差分計算パターン: G_r=G_(dataRow)-Q_(dataRow), H_r=H_(dataRow)-G_(dataRow), ...
+  const DIFF_FORMULAS = [
+    { formulaRow: 9,  dataRow: 8  },
+    { formulaRow: 22, dataRow: 21 },
+    { formulaRow: 24, dataRow: 23 },
+    { formulaRow: 26, dataRow: 25 },
+    { formulaRow: 28, dataRow: 27 },
+  ];
+  DIFF_FORMULAS.forEach(def => {
+    const r = def.formulaRow + rowOffset;
+    const dr = def.dataRow + rowOffset;
+    // G〜K クリア
+    for (let c = COL_START; c <= COL_END; c++) {
+      ws.getCell(r, c).value = null;
+    }
+    // N列分の数式を構築
+    for (let i = 0; i < N; i++) {
+      const col = COL_START + i;
+      const colL = colLetter(col);
+      const formula = (i === 0)
+        ? `${colL}${dr}-Q${dr}`
+        : `${colL}${dr}-${colLetter(col - 1)}${dr}`;
+      ws.getCell(r, col).value = { formula: formula };
+    }
+  });
+
+  // 同列参照パターン: G37=G2, G71=G36, G72=G2
+  const SAME_COL_FORMULAS = [
+    { formulaRow: 37, refRow: 2  },
+    { formulaRow: 71, refRow: 36 },
+    { formulaRow: 72, refRow: 2  },
+  ];
+  SAME_COL_FORMULAS.forEach(def => {
+    const r = def.formulaRow + rowOffset;
+    const refR = def.refRow + rowOffset;
+    for (let c = COL_START; c <= COL_END; c++) {
+      ws.getCell(r, c).value = null;
+    }
+    for (let i = 0; i < N; i++) {
+      const col = COL_START + i;
+      const colL = colLetter(col);
+      ws.getCell(r, col).value = { formula: `${colL}${refR}` };
+    }
   });
 }
 
@@ -4835,6 +5014,17 @@ async function exportExcel() {
         if (ws.properties) ws.properties.tabColor = undefined;
       });
     } catch (e) { console.warn("views/tabColor クリア失敗:", e); }
+
+    // B-6 追加: シート名のリネーム (出力時のみ)
+    try {
+      const renameMap = {
+        "水質管理報告、新": "水質管理報告"
+      };
+      Object.keys(renameMap).forEach(oldName => {
+        const ws = wb.getWorksheet(oldName);
+        if (ws) ws.name = renameMap[oldName];
+      });
+    } catch (e) { console.warn("シート名リネーム失敗:", e); }
 
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });

@@ -881,6 +881,67 @@ body.login-active { overflow: hidden; }
   background: #ececec;
   color: #999;
 }
+
+/* ===== B-2 追加: 祝日マーカー・振替UI ===== */
+.equip-table thead th .col-marker {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  margin-top: 1px;
+  min-height: 11px;
+  color: transparent;
+}
+.equip-table thead th .col-marker.marker-holiday {
+  color: #c0392b;
+}
+.equip-table thead th .col-marker.marker-substitute {
+  color: #d68910;
+  background: #fff3cd;
+  padding: 1px 4px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.holiday-substitute-wrap {
+  margin: 0 12px 8px;
+}
+.holiday-substitute {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.holiday-substitute .hs-title {
+  font-weight: 700;
+  color: #d68910;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.holiday-substitute .hs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  flex-wrap: wrap;
+}
+.holiday-substitute .hs-from {
+  font-weight: 600;
+  color: #333;
+  min-width: 130px;
+}
+.holiday-substitute .hs-select {
+  padding: 4px 6px;
+  border: 1px solid #c9d7e5;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+}
+.holiday-substitute .hs-warn {
+  color: #c0392b;
+  font-size: 12px;
+  font-style: italic;
+}
 </style>
 </head>
 <body>
@@ -2694,7 +2755,7 @@ function loadFromStorage() {
     const raw = localStorage.getItem(storageKey());
     if (raw) {
       const parsed = JSON.parse(raw);
-      yoshiwaData = Object.assign({ targetMonth: "", startDate: "", weeks: {} }, parsed);
+      yoshiwaData = Object.assign({ targetMonth: "", startDate: "", weeks: {}, mech: {}, elec: {} }, parsed);
     }
   } catch (e) {}
   ensureStructure();
@@ -3197,12 +3258,39 @@ function getDateForDayKey(weekIdx, dayKey) {
   return getDateForDay(weekIdx, dayIdx);
 }
 
-// 列ヘッダーの日付（M/D）を更新
-function updateColDateHeaders(tableId, weekIdx) {
+// 列ヘッダーの日付・祝日マーク・振替先マークを更新
+// kind: "mech" or "elec" — kind ごとに holidaySubstitutes が違う
+function updateColDateHeaders(tableId, weekIdx, kind) {
+  const week = (kind === "mech") ? yoshiwaData.mech[weekIdx]
+              : (kind === "elec") ? yoshiwaData.elec[weekIdx] : null;
+  const holidays = getHolidayDaysInWeek(weekIdx);
+  const subs = (week && week.holidaySubstitutes) || {};
+  const subTargets = {};  // { "tue": "wed" } = 火が水の振替先
+  Object.keys(subs).forEach(orig => {
+    if (subs[orig]) subTargets[subs[orig]] = orig;
+  });
+
+  // 日付表示
   document.querySelectorAll("#" + tableId + " thead .col-date").forEach(span => {
     const dk = span.dataset.hday;
     const d = getDateForDayKey(weekIdx, dk);
     span.textContent = d ? (d.getMonth() + 1) + "/" + d.getDate() : "";
+  });
+
+  // 祝日 / 振替先マーカー
+  document.querySelectorAll("#" + tableId + " thead .col-marker").forEach(span => {
+    const dk = span.dataset.mday;
+    let label = "";
+    let cls = "col-marker";
+    if (holidays.indexOf(dk) >= 0) {
+      label = "祝日";
+      cls += " marker-holiday";
+    } else if (subTargets[dk]) {
+      label = "×2日分";
+      cls += " marker-substitute";
+    }
+    span.textContent = label;
+    span.className = cls;
   });
 }
 
@@ -3212,12 +3300,12 @@ function isDayActiveForPattern(pattern, dayKey) {
   return p ? p.days.indexOf(dayKey) >= 0 : false;
 }
 
-// 列ヘッダー HTML を生成（曜日ラベル + 日付スパン）
+// 列ヘッダー HTML を生成（曜日ラベル + 日付スパン + 祝日/振替マーク）
 function buildEquipTableHead() {
   const dayLabels = ["月", "火", "水", "木", "金"];
   let html = '<th>機器/項目</th>';
   EQUIP_DAYS.forEach((dk, i) => {
-    html += `<th>${dayLabels[i]}<br><span class="col-date" data-hday="${dk}"></span></th>`;
+    html += `<th class="col-${dk}">${dayLabels[i]}<br><span class="col-date" data-hday="${dk}"></span><span class="col-marker" data-mday="${dk}"></span></th>`;
   });
   return html;
 }
@@ -3231,7 +3319,16 @@ function buildEquipTableBody(kind, part, weekIdx) {
   const dataAttr = (kind === "mech") ? "data-mfield" : "data-efield";
   const dayAttr = (kind === "mech") ? "data-mday" : "data-eday";
   const week = (kind === "mech") ? yoshiwaData.mech[weekIdx] : yoshiwaData.elec[weekIdx];
-  const pattern = week ? week.pattern : "mwf";
+
+  // 活性日リスト（祝日振替適用後）
+  const activeDays = getActiveDays(week, weekIdx);
+  const holidays = getHolidayDaysInWeek(weekIdx);
+  const subs = (week && week.holidaySubstitutes) || {};
+  // どの曜日が振替先か（逆引き）
+  const subTargets = {};  // { "tue": "wed" } = 火曜は水曜の振替先
+  Object.keys(subs).forEach(orig => {
+    if (subs[orig]) subTargets[subs[orig]] = orig;
+  });
 
   let html = "";
   sections.filter(s => s.part === part).forEach(sec => {
@@ -3239,28 +3336,30 @@ function buildEquipTableBody(kind, part, weekIdx) {
     html += `<tr class="section-header"><td colspan="6">${escapeHtml(sec.title)}</td></tr>`;
 
     sec.fields.forEach(f => {
-      // 1列目: 項目名 + 単位
       const label = `<span class="item-label">${escapeHtml(f.label)}${f.unit ? '<span class="item-unit">('+escapeHtml(f.unit)+')</span>' : ''}</span>`;
-      html += `<tr><td>${label}`;
+      html += `<tr><td>${label}</td>`;
 
-      // 2-6列目: 各曜日の入力セル
       EQUIP_DAYS.forEach(dk => {
-        const active = isDayActiveForPattern(pattern, dk);
         const date = getDateForDayKey(weekIdx, dk);
         const inMonth = !!date;
-        const enabled = active && inMonth;
-        const cls = enabled ? "" : ' class="day-disabled"';
+        const isHoliday = holidays.indexOf(dk) >= 0;
+        const isActive = activeDays.indexOf(dk) >= 0;
+        const isSubTarget = !!subTargets[dk];  // 振替先
+
+        // 列が活性かどうか
+        const enabled = isActive && inMonth;
+        const tdCls = enabled ? "" : ' class="day-disabled"';
         const disabledAttr = enabled ? "" : ' disabled';
 
         if (f.type === "number") {
-          html += `<td${cls}><input type="number" inputmode="decimal" step="${f.step || '1'}" ${dataAttr}="${f.key}" ${dayAttr}="${dk}"${disabledAttr}></td>`;
+          html += `<td${tdCls}><input type="number" inputmode="decimal" step="${f.step || '1'}" ${dataAttr}="${f.key}" ${dayAttr}="${dk}"${disabledAttr}></td>`;
         } else if (f.type === "text") {
-          html += `<td${cls}><input type="text" inputmode="${f.inputmode || 'decimal'}" ${dataAttr}="${f.key}" ${dayAttr}="${dk}" placeholder="${f.placeholder || ''}"${disabledAttr}></td>`;
+          html += `<td${tdCls}><input type="text" inputmode="${f.inputmode || 'decimal'}" ${dataAttr}="${f.key}" ${dayAttr}="${dk}" placeholder="${f.placeholder || ''}"${disabledAttr}></td>`;
         } else if (f.type === "toggle") {
           const opts = JSON.stringify(f.options || []).replace(/"/g, '&quot;');
-          html += `<td${cls}><button type="button" class="toggle-btn" ${dataAttr}="${f.key}" ${dayAttr}="${dk}" data-options="${opts}"${disabledAttr}>―</button></td>`;
+          html += `<td${tdCls}><button type="button" class="toggle-btn" ${dataAttr}="${f.key}" ${dayAttr}="${dk}" data-options="${opts}"${disabledAttr}>―</button></td>`;
         } else {
-          html += `<td${cls}>—</td>`;
+          html += `<td${tdCls}>—</td>`;
         }
       });
       html += `</tr>`;
@@ -3293,15 +3392,24 @@ function renderMechPanel() {
     }
   }
 
+  // 振替UI（祝日があれば表示）
+  renderHolidaySubstituteUI("mech", currentMechWeek);
+
   // テーブルヘッダー
   const head = document.getElementById("mechTableHead");
   if (head) head.innerHTML = buildEquipTableHead();
-  // 列ヘッダー日付
-  updateColDateHeaders("mechTable", currentMechWeek);
+  // 列ヘッダー日付・祝日マーク
+  updateColDateHeaders("mechTable", currentMechWeek, "mech");
 
   // テーブル本体
   const body = document.getElementById("mechBody");
   if (body) body.innerHTML = buildEquipTableBody("mech", currentMechPart, currentMechWeek);
+
+  // データを入力欄へ反映
+  loadMechDataToForm();
+
+  // 入力イベントを再バインド（再描画時毎回必要）
+  bindEquipInputEvents("mech");
 }
 
 // 電気パネル描画
@@ -3321,12 +3429,300 @@ function renderElecPanel() {
     display.textContent = (SCHEDULE_PATTERNS[p] && SCHEDULE_PATTERNS[p].label) || p;
   }
 
+  // 振替UI
+  renderHolidaySubstituteUI("elec", currentElecWeek);
+
   const head = document.getElementById("elecTableHead");
   if (head) head.innerHTML = buildEquipTableHead();
-  updateColDateHeaders("elecTable", currentElecWeek);
+  updateColDateHeaders("elecTable", currentElecWeek, "elec");
 
   const body = document.getElementById("elecBody");
   if (body) body.innerHTML = buildEquipTableBody("elec", currentElecPart, currentElecWeek);
+
+  loadElecDataToForm();
+  bindEquipInputEvents("elec");
+}
+
+// =====================================================
+// B-2 追加: 機械・電気の保存・読込関数
+// =====================================================
+
+// フォームの値をデータへ書き込む（共通処理）
+// kind: "mech" | "elec"
+function saveEquipFormToData(kind) {
+  const dataAttr = (kind === "mech") ? "mfield" : "efield";
+  const dayAttr = (kind === "mech") ? "mday" : "eday";
+  const week = (kind === "mech")
+    ? yoshiwaData.mech[currentMechWeek]
+    : yoshiwaData.elec[currentElecWeek];
+  if (!week || !week.days) return;
+
+  // input 要素
+  document.querySelectorAll(`[data-${dataAttr}]`).forEach(el => {
+    const key = el.dataset[dataAttr];
+    const day = el.dataset[dayAttr];
+    if (!day || !week.days[day]) return;
+    if (el.disabled) return;  // 非活性日は書き換えない
+
+    if (el.tagName === "INPUT") {
+      if (el.type === "number") {
+        if (el.value === "") {
+          week.days[day][key] = null;
+        } else {
+          const num = Number(el.value);
+          week.days[day][key] = isNaN(num) ? el.value : num;
+        }
+      } else if (el.type === "text") {
+        // 流量計など「-」許容
+        const v = (el.value || "").trim();
+        if (v === "" || v === "-") {
+          week.days[day][key] = (v === "-") ? "-" : null;
+        } else {
+          const num = Number(v);
+          week.days[day][key] = isNaN(num) ? v : num;
+        }
+      }
+    } else if (el.tagName === "BUTTON" && el.classList.contains("toggle-btn")) {
+      week.days[day][key] = el.dataset.val || null;
+    }
+  });
+}
+
+function saveMechFormToData() { saveEquipFormToData("mech"); }
+function saveElecFormToData() { saveEquipFormToData("elec"); }
+
+// データをフォームへ読み込む（共通処理）
+// レンダリング後 (buildEquipTableBody) に呼ばれる
+function loadEquipDataToForm(kind) {
+  const dataAttr = (kind === "mech") ? "mfield" : "efield";
+  const dayAttr = (kind === "mech") ? "mday" : "eday";
+  const week = (kind === "mech")
+    ? yoshiwaData.mech[currentMechWeek]
+    : yoshiwaData.elec[currentElecWeek];
+  if (!week || !week.days) return;
+
+  document.querySelectorAll(`[data-${dataAttr}]`).forEach(el => {
+    const key = el.dataset[dataAttr];
+    const day = el.dataset[dayAttr];
+    const v = (week.days[day] && key in week.days[day]) ? week.days[day][key] : null;
+
+    if (el.tagName === "INPUT") {
+      // text 型で「-」を空値時にデフォルト表示するか判定（吉和は流量計系のみ）
+      const isDashField = (el.type === "text" && el.placeholder === "-");
+      if (v === null || v === undefined || v === "") {
+        el.value = isDashField ? "-" : "";
+      } else {
+        el.value = v;
+      }
+    } else if (el.tagName === "BUTTON" && el.classList.contains("toggle-btn")) {
+      const val = (v === null || v === undefined) ? "" : String(v);
+      el.dataset.val = val;
+      el.textContent = val || "―";
+    }
+  });
+}
+
+function loadMechDataToForm() { loadEquipDataToForm("mech"); }
+function loadElecDataToForm() { loadEquipDataToForm("elec"); }
+
+// =====================================================
+// B-2 追加: 祝日振替ロジック
+// =====================================================
+
+// 指定週で祝日に該当する曜日キー一覧（mon〜fri のうち祝日のもの）
+function getHolidayDaysInWeek(weekIdx) {
+  const ws = monthWeeks[weekIdx - 1];
+  if (!ws) return [];
+  const holidays = [];
+  EQUIP_DAYS.forEach((dk, i) => {
+    const dayIdx = i + 1;
+    // ws[dayIdx] が null = 月外 or 祝日（祝日は monthWeeks 構築時に除外されている）
+    // 月内かつ ws[dayIdx] が null → 祝日
+    // 月内判定: dayIdx に対応する Date が月内に存在するかチェック
+    const ym = yoshiwaData.targetMonth;
+    if (!ym) return;
+    const [y, m] = ym.split("-").map(Number);
+    // 該当曜日の日付を逆算: 第N週のN曜日
+    // ※ 簡易的に「月内なのに ws[dayIdx]==null」は祝日として扱う
+    if (ws[dayIdx] === null) {
+      // 月外なのか祝日なのか区別。週内の他の日が同じ月かどうかで判断
+      const otherDate = [1,2,3,4,5].map(d => ws[d]).find(d => d);
+      if (otherDate) {
+        // 同週に月内日がある → この曜日は月内の祝日 or 月境界
+        // 月境界（月初/月末）かチェック
+        const wkStart = new Date(otherDate);
+        wkStart.setDate(otherDate.getDate() - (otherDate.getDay() === 0 ? 6 : otherDate.getDay() - 1));
+        const checkDate = new Date(wkStart);
+        checkDate.setDate(wkStart.getDate() + (dayIdx - 1));
+        if (checkDate.getMonth() === m - 1 && isCompanyHoliday(checkDate)) {
+          holidays.push(dk);
+        }
+      }
+    }
+  });
+  return holidays;
+}
+
+// 振替適用後の活性日リスト
+// pattern + holidaySubstitutes を考慮して計算
+// 例: pattern="mwf", holidaySubstitutes={wed:"tue"}, holidays=["wed"]
+//   → active = ["mon", "tue"(振替), "fri"]
+function getActiveDays(weekData, weekIdx) {
+  if (!weekData) return [];
+  const pattern = weekData.pattern || "mwf";
+  const baseDays = (SCHEDULE_PATTERNS[pattern] && SCHEDULE_PATTERNS[pattern].days) || [];
+  const subs = weekData.holidaySubstitutes || {};
+  const holidays = getHolidayDaysInWeek(weekIdx);
+
+  const result = [];
+  baseDays.forEach(dk => {
+    if (holidays.indexOf(dk) >= 0) {
+      // この日は祝日 → 振替先を見る
+      const sub = subs[dk];
+      if (sub && holidays.indexOf(sub) < 0) {
+        if (result.indexOf(sub) < 0) result.push(sub);
+      }
+      // 振替先未設定 → スキップ（その分は失われる）
+    } else {
+      if (result.indexOf(dk) < 0) result.push(dk);
+    }
+  });
+  return result;
+}
+
+// 振替先候補（パターンの活性日でない曜日のうち、月内かつ祝日でない日）
+function getSubstituteCandidates(weekIdx, weekData) {
+  if (!weekData) return [];
+  const pattern = weekData.pattern || "mwf";
+  const baseDays = (SCHEDULE_PATTERNS[pattern] && SCHEDULE_PATTERNS[pattern].days) || [];
+  const holidays = getHolidayDaysInWeek(weekIdx);
+  return EQUIP_DAYS.filter(dk =>
+    baseDays.indexOf(dk) < 0 &&     // 元のパターンに含まれない
+    holidays.indexOf(dk) < 0 &&     // 祝日でない
+    !!getDateForDayKey(weekIdx, dk) // 月内に存在する
+  );
+}
+
+// 振替先選択UIの描画
+// kind: "mech" | "elec"
+function renderHolidaySubstituteUI(kind, weekIdx) {
+  const containerId = (kind === "mech") ? "mechSubstitute" : "elecSubstitute";
+  let container = document.getElementById(containerId);
+  // 親要素は週タブのすぐ下のパターンセレクタの後あたり
+  if (!container) {
+    const panel = document.getElementById((kind === "mech") ? "mechPanel" : "elecPanel");
+    if (!panel) return;
+    container = document.createElement("div");
+    container.id = containerId;
+    container.className = "holiday-substitute-wrap";
+    // パターンセレクタの後に挿入
+    const partTabs = document.getElementById((kind === "mech") ? "mechPartTabs" : "elecPartTabs");
+    if (partTabs) {
+      panel.insertBefore(container, partTabs);
+    } else {
+      panel.appendChild(container);
+    }
+  }
+
+  const week = (kind === "mech") ? yoshiwaData.mech[weekIdx] : yoshiwaData.elec[weekIdx];
+  if (!week) { container.innerHTML = ""; return; }
+
+  const baseDays = (SCHEDULE_PATTERNS[week.pattern] && SCHEDULE_PATTERNS[week.pattern].days) || [];
+  const holidays = getHolidayDaysInWeek(weekIdx);
+  const targetHolidays = baseDays.filter(dk => holidays.indexOf(dk) >= 0);
+
+  if (targetHolidays.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const candidates = getSubstituteCandidates(weekIdx, week);
+  if (!week.holidaySubstitutes) week.holidaySubstitutes = {};
+
+  const dayLabel = { mon: "月", tue: "火", wed: "水", thu: "木", fri: "金" };
+  const subs = week.holidaySubstitutes;
+
+  let html = '<div class="holiday-substitute"><div class="hs-title">⚠️ 祝日振替先を選択</div>';
+  targetHolidays.forEach(hday => {
+    const date = getDateForDayKey(weekIdx, hday);
+    const dateStr = date ? `${date.getMonth()+1}/${date.getDate()}` : "";
+    html += `<div class="hs-row"><span class="hs-from">${dayLabel[hday]}(${dateStr}) 祝日 →</span>`;
+    if (candidates.length === 0) {
+      html += `<span class="hs-warn">振替候補なし</span>`;
+    } else {
+      html += `<select class="hs-select" data-kind="${kind}" data-from="${hday}">`;
+      html += `<option value="">未選択</option>`;
+      candidates.forEach(c => {
+        const cd = getDateForDayKey(weekIdx, c);
+        const cs = cd ? `${cd.getMonth()+1}/${cd.getDate()}` : "";
+        const sel = (subs[hday] === c) ? " selected" : "";
+        html += `<option value="${c}"${sel}>${dayLabel[c]}(${cs})</option>`;
+      });
+      html += `</select>`;
+    }
+    html += `</div>`;
+  });
+  html += '</div>';
+  container.innerHTML = html;
+
+  // change イベント
+  container.querySelectorAll(".hs-select").forEach(sel => {
+    sel.addEventListener("change", () => {
+      const kind = sel.dataset.kind;
+      const from = sel.dataset.from;
+      const w = (kind === "mech") ? yoshiwaData.mech[weekIdx] : yoshiwaData.elec[weekIdx];
+      if (!w) return;
+      if (!w.holidaySubstitutes) w.holidaySubstitutes = {};
+      if (sel.value) {
+        w.holidaySubstitutes[from] = sel.value;
+      } else {
+        delete w.holidaySubstitutes[from];
+      }
+      markDirty();
+      // 再描画
+      if (kind === "mech") renderMechPanel(); else renderElecPanel();
+    });
+  });
+}
+
+// 入力イベントを再バインド（テーブル再描画後に呼ぶ）
+function bindEquipInputEvents(kind) {
+  const dataAttr = (kind === "mech") ? "mfield" : "efield";
+  const containerId = (kind === "mech") ? "mechBody" : "elecBody";
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // input 要素: change/input で markDirty
+  container.querySelectorAll(`input[data-${dataAttr}]`).forEach(el => {
+    el.addEventListener("input", () => markDirty());
+    el.addEventListener("change", () => markDirty());
+  });
+
+  // toggle ボタン: クリックで次の選択肢へ循環
+  container.querySelectorAll(`button.toggle-btn[data-${dataAttr}]`).forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      let opts;
+      try {
+        opts = JSON.parse(btn.dataset.options.replace(/&quot;/g, '"'));
+      } catch (e) { opts = []; }
+      if (!Array.isArray(opts) || opts.length === 0) return;
+      const cur = btn.dataset.val || "";
+      const idx = opts.indexOf(cur);
+      // 順番: 未選択 → 選択肢1 → 選択肢2 → ... → 未選択
+      let nextVal;
+      if (cur === "" || idx < 0) {
+        nextVal = opts[0];
+      } else if (idx === opts.length - 1) {
+        nextVal = "";  // クリア
+      } else {
+        nextVal = opts[idx + 1];
+      }
+      btn.dataset.val = nextVal;
+      btn.textContent = nextVal || "―";
+      markDirty();
+    });
+  });
 }
 
 function ensureAerationForMonth(ym) {
@@ -3793,6 +4189,10 @@ function saveMlssReturnFormToData() {
 function saveCurrentFormToData() {
   if (currentMain === "weekly") {
     saveFormToData();
+  } else if (currentMain === "mech") {
+    saveMechFormToData();
+  } else if (currentMain === "elec") {
+    saveElecFormToData();
   } else if (currentAnnualSub === "aeration") {
     saveAerationFormToData();
   } else {
@@ -4581,6 +4981,10 @@ function bindEvents() {
     let scope = '';
     if (currentMain === 'weekly') {
       scope = '第' + currentWeek + '週';
+    } else if (currentMain === 'mech') {
+      scope = '機械設備 第' + currentMechWeek + '週';
+    } else if (currentMain === 'elec') {
+      scope = '電気設備 第' + currentElecWeek + '週';
     } else if (currentMain === 'annual') {
       scope = currentAnnualSub === 'aeration' ? 'エアレーション' : '返送汚泥MLSS';
     }

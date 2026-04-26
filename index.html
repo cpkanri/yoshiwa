@@ -5211,41 +5211,6 @@ async function exportExcel() {
       });
     } catch (e) { console.warn("シート名リネーム失敗:", e); }
 
-    // B-6 追加: 機械・電気設備シートで長い項目名がセルからはみ出さないよう shrinkToFit を有効化
-    // (注) 結合セルやタイトル行 (Row 1, 各週ブロック先頭) は除外。結合セルでは shrinkToFit が機能せず
-    // タイトル文字が極端に縮小されて見えなくなる問題があるため。
-    try {
-      const shrinkConfig = [
-        { name: "日常機械設備", blockSize: 188 },
-        { name: "日常電気設備", blockSize: 106 },
-        { name: "月例機械設備", blockSize: 0 },  // 単一ブロック
-        { name: "月例電気設備", blockSize: 0 },
-      ];
-      shrinkConfig.forEach(cfg => {
-        const ws = wb.getWorksheet(cfg.name);
-        if (!ws) return;
-        ws.eachRow({ includeEmpty: false }, (row, rowNum) => {
-          // 各週ブロックの先頭3行（タイトル、点検者、点検内容）はスキップ
-          if (cfg.blockSize > 0) {
-            const inBlockRow = ((rowNum - 1) % cfg.blockSize) + 1;
-            if (inBlockRow <= 3) return;
-          } else {
-            if (rowNum <= 3) return;
-          }
-          row.eachCell({ includeEmpty: false }, cell => {
-            if (cell.value === null || cell.value === undefined) return;
-            // 結合セルは shrinkToFit が機能しないので除外
-            if (cell.master && cell.master !== cell) return;
-            // 結合の主セルでも、結合範囲があれば shrinkToFit は不要（結合幅で表示される）
-            if (cell.isMerged) return;
-            const align = cell.alignment || {};
-            if (align.wrapText) return;
-            cell.alignment = Object.assign({}, align, { shrinkToFit: true });
-          });
-        });
-      });
-    } catch (e) { console.warn("shrinkToFit 設定失敗:", e); }
-
     // B-6 追加: 電気設備テンプレに残った余分な K1=0 をクリア（各週ブロック分）
     try {
       const wsElec = wb.getWorksheet("日常電気設備");

@@ -5333,15 +5333,16 @@ function fillWaterWeeklySheet(wb) {
       // 日付ラベル (row_offset=2) は従来通り toExcelDate
       if (f.id === "weekly_date") {
         // 日付ヘッダーは D=月, E=火, F=水, G=木, H=金, I=翌週月
+        // B-6: 祝日でも日付ラベルは表示する（実データは入らない）
         if (weekSlots) {
+          const tmStr = (yoshiwaData.targetMonth || "").split("-")[1];
+          const tm = parseInt(tmStr) || 0;
           for (let d = 1; d <= 5; d++) {
             const col = 3 + d; // d=1→D(4), d=2→E(5), ..., d=5→H(8)
-            const dateObj = weekSlots[d];
-            if (dateObj) {
+            const headerDate = getReportHeaderDate(weekSlots, d, tm);
+            if (headerDate) {
               const cell = ws.getCell(row, col);
-              cell.value = toExcelDate(dateObj);
-              // 書式はテンプレート側のものを尊重（「m月d日(aaa)」など）
-              // 列幅不足で ######## になる場合はテンプレート側で shrink_to_fit が効く
+              cell.value = toExcelDate(headerDate);
             } else {
               ws.getCell(row, col).value = null;
             }
@@ -5459,29 +5460,47 @@ function fillWaterWeeklySheet(wb) {
     });
 
     // ==================== 下段: 測定セクション (E-I 5列、従来通り) ====================
-    for (let d = 1; d <= 5; d++) {
-      const dateObj = weekSlots ? weekSlots[d] : null;
-      if (!dateObj) {
-        // 月外・休業日 → 該当列をクリア
-        clearWeeklySheetLowerDayColumn(ws, weekBase, d);
-        continue;
-      }
-      if (!weekData) continue;
-      const col = 4 + d; // d=1→5(E), d=5→9(I)
-      const dayData = weekData[d];
-      if (!dayData) continue;
+    // B-6: 祝日でも measure_date (日付ヘッダー) は表示する。実データは祝日では書かない。
+    {
+      const tmStr = (yoshiwaData.targetMonth || "").split("-")[1];
+      const tm = parseInt(tmStr) || 0;
+      for (let d = 1; d <= 5; d++) {
+        const dateObj = weekSlots ? weekSlots[d] : null;
+        const headerDate = getReportHeaderDate(weekSlots, d, tm);
+        const col = 4 + d; // d=1→5(E), d=5→9(I)
 
-      lower.fields.forEach(f => {
-        if (f.skip_weekly || f.row_offset === undefined) return;
-        const row = weekBase + f.row_offset;
-        if (f.id === "measure_date") {
-          const cell = ws.getCell(row, col);
-          cell.value = toExcelDate(dateObj);
-          cell.numFmt = cell.numFmt || 'm/d';
-        } else {
-          setCell(ws, row, col, dayData[f.id]);
+        if (!headerDate) {
+          // 月外日 → 該当列をクリア
+          clearWeeklySheetLowerDayColumn(ws, weekBase, d);
+          continue;
         }
-      });
+
+        // 祝日（dateObj=null だが headerDate あり）の場合、データ部はクリアしてから measure_date のみ書く
+        if (!dateObj) {
+          clearWeeklySheetLowerDayColumn(ws, weekBase, d);
+        }
+
+        // measure_date を書き込み（祝日でも）
+        const measureDateField = lower.fields.find(ff => ff.id === "measure_date");
+        if (measureDateField && measureDateField.row_offset !== undefined) {
+          const mdRow = weekBase + measureDateField.row_offset;
+          const cell = ws.getCell(mdRow, col);
+          cell.value = toExcelDate(headerDate);
+          cell.numFmt = cell.numFmt || 'm/d';
+        }
+
+        if (!dateObj) continue; // 祝日: 実データは書かない
+        if (!weekData) continue;
+        const dayData = weekData[d];
+        if (!dayData) continue;
+
+        lower.fields.forEach(f => {
+          if (f.skip_weekly || f.row_offset === undefined) return;
+          if (f.id === "measure_date") return; // 既に書き込み済み
+          const row = weekBase + f.row_offset;
+          setCell(ws, row, col, dayData[f.id]);
+        });
+      }
     }
 
     // ==================== 上段の月外・休業日クリア（D-I列、固定値含む） ====================
@@ -5498,6 +5517,24 @@ function clearWeeklySheetLowerDayColumn(ws, weekBase, d) {
     const cell = ws.getCell(weekBase + rowOffset, col);
     cell.value = null;
   }
+}
+
+// B-6: 週内の特定の曜日(d=1..5, 月..金)の日付を返す。祝日・休業日でも月内なら日付を返す。
+// 水質週報の日付ヘッダー用 - 月外（前月/翌月）の場合のみ null を返す。
+function getReportHeaderDate(weekSlots, d, targetMonth) {
+  if (!weekSlots) return null;
+  if (weekSlots[d]) return weekSlots[d];
+  // weekSlots[d] が null（祝日）の場合、他の有効日から逆算
+  for (let i = 1; i <= 5; i++) {
+    if (weekSlots[i]) {
+      const candidate = new Date(weekSlots[i]);
+      candidate.setDate(weekSlots[i].getDate() + (d - i));
+      // その日が同じ月なら返す（前月/翌月にまたぐ場合は null）
+      if (candidate.getMonth() + 1 === targetMonth) return candidate;
+      return null;
+    }
+  }
+  return null;
 }
 
 // ===== 水質管理報告、新 書込 =====

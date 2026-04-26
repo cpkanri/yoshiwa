@@ -3785,37 +3785,57 @@ function bindEquipInputEvents(kind) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  // input 要素: change/input で markDirty
-  container.querySelectorAll(`input[data-${dataAttr}]`).forEach(el => {
-    el.addEventListener("input", () => markDirty());
-    el.addEventListener("change", () => markDirty());
-  });
+  // B-6 修正: イベント委譲方式に変更（再描画でハンドラ漏れが起きないように）
+  // 既に同じ kind 用のハンドラが登録されていれば削除
+  const handlerKey = "_yoshiwaEquipHandlers";
+  if (container[handlerKey]) {
+    const prev = container[handlerKey];
+    container.removeEventListener("click", prev.click);
+    container.removeEventListener("input", prev.input);
+    container.removeEventListener("change", prev.change);
+  }
 
-  // toggle ボタン: クリックで次の選択肢へ循環
-  container.querySelectorAll(`button.toggle-btn[data-${dataAttr}]`).forEach(btn => {
-    btn.addEventListener("click", () => {
-      if (btn.disabled) return;
-      let opts;
-      try {
-        opts = JSON.parse(btn.dataset.options.replace(/&quot;/g, '"'));
-      } catch (e) { opts = []; }
-      if (!Array.isArray(opts) || opts.length === 0) return;
-      const cur = btn.dataset.val || "";
-      const idx = opts.indexOf(cur);
-      // 順番: 未選択 → 選択肢1 → 選択肢2 → ... → 未選択
-      let nextVal;
-      if (cur === "" || idx < 0) {
-        nextVal = opts[0];
-      } else if (idx === opts.length - 1) {
-        nextVal = "";  // クリア
-      } else {
-        nextVal = opts[idx + 1];
-      }
-      btn.dataset.val = nextVal;
-      btn.textContent = nextVal || "―";
+  // クリックハンドラ（toggle-btn）
+  const onClick = function(ev) {
+    const btn = ev.target.closest(`button.toggle-btn[data-${dataAttr}]`);
+    if (!btn || btn.disabled) return;
+    let opts;
+    try {
+      opts = JSON.parse((btn.dataset.options || "[]").replace(/&quot;/g, '"'));
+    } catch (e) { opts = []; }
+    if (!Array.isArray(opts) || opts.length === 0) return;
+    const cur = btn.dataset.val || "";
+    const idx = opts.indexOf(cur);
+    // 順番: 未選択 → 選択肢1 → 選択肢2 → ... → 未選択
+    let nextVal;
+    if (cur === "" || idx < 0) {
+      nextVal = opts[0];
+    } else if (idx === opts.length - 1) {
+      nextVal = "";  // クリア
+    } else {
+      nextVal = opts[idx + 1];
+    }
+    btn.dataset.val = nextVal;
+    btn.textContent = nextVal || "―";
+    markDirty();
+  };
+
+  // 入力ハンドラ (input type=number, type=text)
+  const onInput = function(ev) {
+    if (ev.target.matches(`input[data-${dataAttr}]`)) {
       markDirty();
-    });
-  });
+    }
+  };
+  const onChange = function(ev) {
+    if (ev.target.matches(`input[data-${dataAttr}]`)) {
+      markDirty();
+    }
+  };
+
+  container.addEventListener("click", onClick);
+  container.addEventListener("input", onInput);
+  container.addEventListener("change", onChange);
+  container[handlerKey] = { click: onClick, input: onInput, change: onChange };
 }
 
 function ensureAerationForMonth(ym) {

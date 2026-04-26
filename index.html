@@ -5235,6 +5235,8 @@ async function exportExcel() {
           { row: 10, col: 6, shrink: true,  smallFont: false }, // F: 手動/自動
           { row: 12, col: 2, shrink: true,  smallFont: true  }, // B: 変圧器（結合）
           { row: 20, col: 6, shrink: true,  smallFont: false }, // F: 買電/自家発
+          { row: 57, col: 4, shrink: true,  smallFont: true  }, // D: No.1余剰汚泥ポンプ流量計読み（結合）
+          { row: 58, col: 4, shrink: true,  smallFont: true  }, // D: No.2余剰汚泥ポンプ流量計読み（結合）
         ];
         for (let week = 0; week < 5; week++) {
           const offset = week * ROWS_PER_BLOCK_ELEC;

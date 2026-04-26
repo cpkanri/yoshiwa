@@ -1239,11 +1239,11 @@ const YOSHIWA_FIELDS = {
       { id: "demand",           row_offset: 7,  label: "デマンド",       unit: "kW",   type: "number", step: "0.1", cumulative: true },
       { id: "water_usage",      row_offset: 8,  label: "水道使用量",     unit: "㎥",   type: "number", step: "1", cumulative: true },
       { id: "diesel_fuel",      row_offset: 9,  label: "軽油(残量)",     unit: "ℓ",    type: "number", step: "1", cumulative: true },
-      { id: "return_sludge_1",  row_offset: 10, label: "返送汚泥流量1",  unit: "㎥",   type: "number", step: "1", cumulative: true },
-      { id: "return_sludge_2",  row_offset: 11, label: "返送汚泥流量2",  unit: "㎥",   type: "number", step: "1", cumulative: true },
-      { id: "excess_sludge",    row_offset: 12, label: "余剰汚泥流量",   unit: "㎥",   type: "number", step: "1", cumulative: true },
-      { id: "discharge_total",  row_offset: 13, label: "積算放流流量",   unit: "㎥",   type: "number", step: "1", cumulative: true },
-      { id: "discharge_daily",  row_offset: 14, label: "日放流流量",     unit: "㎥",   type: "number", step: "1", average: true, allow_on_holiday: true }
+      { id: "return_sludge_1",  row_offset: 10, label: "返送汚泥流量1",  unit: "㎥",   type: "number", step: "1", cumulative: true, dashSupport: true },
+      { id: "return_sludge_2",  row_offset: 11, label: "返送汚泥流量2",  unit: "㎥",   type: "number", step: "1", cumulative: true, dashSupport: true },
+      { id: "excess_sludge",    row_offset: 12, label: "余剰汚泥流量",   unit: "㎥",   type: "number", step: "1", cumulative: true, dashSupport: true },
+      { id: "discharge_total",  row_offset: 13, label: "積算放流流量",   unit: "㎥",   type: "number", step: "1", cumulative: true, dashSupport: true },
+      { id: "discharge_daily",  row_offset: 14, label: "日放流流量",     unit: "㎥",   type: "number", step: "1", average: true, allow_on_holiday: true, dashSupport: true }
     ]
   },
 
@@ -1285,6 +1285,13 @@ const YOSHIWA_FIELDS = {
     ]
   }
 };
+
+// ===== 「-」入力許可フィールド（流量計など、メーター不読・欠測時に「-」表記） =====
+// dashSupport: true が付いた YOSHIWA_FIELDS フィールド ID を自動収集
+const DASH_SUPPORT_FIELDS = new Set([
+  ...YOSHIWA_FIELDS.upper_section.fields.filter(f => f.dashSupport).map(f => f.id),
+  ...YOSHIWA_FIELDS.lower_section.fields.filter(f => f.dashSupport).map(f => f.id)
+]);
 
 // ===== 休業日（祝日・年末年始休暇）=====
 // 吉和水質管理センターは祝日・年末年始は出勤せず、点検・測定・記録を行わない。
@@ -1971,6 +1978,15 @@ function saveFormToData() {
         const num = Number(el.value);
         cell[key] = isNaN(num) ? el.value : num;
       }
+    } else if (el.type === "text" && DASH_SUPPORT_FIELDS.has(key)) {
+      // 流量計など「-」許容フィールド: 空→null / "-"→"-"文字列 / 数字→Number
+      const v = (el.value || "").trim();
+      if (v === "" || v === "-") {
+        cell[key] = (v === "-") ? "-" : null;
+      } else {
+        const num = Number(v);
+        cell[key] = isNaN(num) ? v : num;
+      }
     } else if (el.type === "date") {
       cell[key] = el.value || null;
     } else {
@@ -2010,7 +2026,12 @@ function loadDataToForm() {
       el.dataset.val = val;
       el.textContent = val || "―";
     } else {
-      el.value = (v === null || v === undefined) ? "" : v;
+      // dashSupport フィールドは空値時に「-」を表示（メーター不読時の既定値）
+      if ((v === null || v === undefined || v === "") && DASH_SUPPORT_FIELDS.has(key) && el.type === "text") {
+        el.value = "-";
+      } else {
+        el.value = (v === null || v === undefined) ? "" : v;
+      }
     }
   });
 
@@ -2240,7 +2261,12 @@ function renderForm() {
       if (f.id === "weekly_date" || f.id === "measure_date") return;
       html += `<div class="field"><span class="label">${escapeHtml(f.label)}</span><span class="unit">${escapeHtml(f.unit || "")}</span>`;
       if (f.type === "number") {
-        html += `<input type="number" inputmode="decimal" step="${f.step || "1"}" data-field="${f.id}">`;
+        if (f.dashSupport) {
+          // 流量計など「-」入力可能なフィールドは text として描画
+          html += `<input type="text" inputmode="decimal" data-field="${f.id}" placeholder="-">`;
+        } else {
+          html += `<input type="number" inputmode="decimal" step="${f.step || "1"}" data-field="${f.id}">`;
+        }
       } else if (f.type === "date") {
         html += `<input type="date" data-field="${f.id}">`;
       } else if (f.type === "text") {
@@ -2640,7 +2666,7 @@ function renderAerationUI(body) {
         <div class="section-header">エアレーション運転時間（前回値継続方式 - 変更があった日だけ入力）</div>
         <div style="font-size:12px;color:#666;padding:4px 12px 8px;">青色背景=入力済み / 薄い文字=前回値継続</div>
         <div style="max-height:60vh;overflow:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;">
             <thead><tr style="background:#e8eff7;position:sticky;top:0;z-index:1;">
               <th style="padding:6px;border:1px solid #c9d7e5;text-align:center;width:40px;">日</th>
               <th style="padding:6px;border:1px solid #c9d7e5;text-align:center;width:40px;">曜</th>

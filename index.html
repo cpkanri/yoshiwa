@@ -2302,21 +2302,26 @@ function ensureMechElecStructure() {
 function hasAnyEquipData(weekData) {
   if (!weekData || typeof weekData !== "object") return false;
   for (const w in weekData) {
-    const week = weekData[w];
-    if (!week || !week.days) continue;
-    for (const dk in week.days) {
-      const day = week.days[dk];
-      if (!day) continue;
-      for (const k in day) {
-        const v = day[k];
-        if (v !== null && v !== undefined && v !== "") return true;
-      }
+    if (hasAnyEquipDayData(weekData[w])) return true;
+  }
+  return false;
+}
+
+// B-6 追加: 1週分のデータに実値があるかチェック (Excel出力時の週フィルタ用)
+function hasAnyEquipDayData(week) {
+  if (!week || !week.days) return false;
+  for (const dk in week.days) {
+    const day = week.days[dk];
+    if (!day) continue;
+    for (const k in day) {
+      const v = day[k];
+      if (v !== null && v !== undefined && v !== "") return true;
     }
-    // holidaySubstitutes に値があれば「実値あり」とみなす（運用判断記録）
-    if (week.holidaySubstitutes && Object.keys(week.holidaySubstitutes).length > 0) {
-      for (const orig in week.holidaySubstitutes) {
-        if (week.holidaySubstitutes[orig]) return true;
-      }
+  }
+  // holidaySubstitutes に値があれば「実値あり」とみなす
+  if (week.holidaySubstitutes && Object.keys(week.holidaySubstitutes).length > 0) {
+    for (const orig in week.holidaySubstitutes) {
+      if (week.holidaySubstitutes[orig]) return true;
     }
   }
   return false;
@@ -4508,7 +4513,7 @@ function fillMechSheet(wb) {
   const src = wb.getWorksheet(SOURCE_NAME);
   if (!src) return;
 
-  // データのある週のみ処理（空の週はシート作らない）
+  // データのある週のみ処理（空の週はブロック追加しない）
   const activeWeeks = [];
   for (let w = 1; w <= 5; w++) {
     const wd = yoshiwaData.mech[w];
@@ -4517,7 +4522,10 @@ function fillMechSheet(wb) {
     if (!ws) continue;
     // 月内の有効日があるか判定
     const hasMonthDays = [1,2,3,4,5].some(d => ws[d]);
-    if (hasMonthDays) activeWeeks.push(w);
+    if (!hasMonthDays) continue;
+    // B-6 修正: 実値がある週のみブロック追加
+    if (!hasAnyEquipDayData(wd)) continue;
+    activeWeeks.push(w);
   }
 
   if (activeWeeks.length === 0) {
@@ -4525,33 +4533,91 @@ function fillMechSheet(wb) {
     return;
   }
 
-  // 元シートを 第1週用に転用、第2〜第5週は複製
-  src.name = SOURCE_NAME + " 第" + activeWeeks[0] + "週";
-  fillMechWeekSheet(src, activeWeeks[0]);
+  // B-6 修正: 週ごとに別シートではなく、1シート内に縦に積む方式
+  // 元テンプレ最終データ行を測定
+  const ROWS_PER_BLOCK = src.actualRowCount;  // テンプレの 1ブロック分行数
 
+  // 第1週は元テンプレ位置 (1〜ROWS_PER_BLOCK 行目) に書き込み
+  fillMechWeekBlock(src, activeWeeks[0], 0);
+
+  // 第2週以降は、1ブロック分の行を末尾にコピーしてから書き込み
   for (let i = 1; i < activeWeeks.length; i++) {
     const w = activeWeeks[i];
-    const newName = SOURCE_NAME + " 第" + w + "週";
-    const newWs = duplicateWorksheet(wb, src.name, newName);
-    if (newWs) fillMechWeekSheet(newWs, w);
+    const offset = ROWS_PER_BLOCK * i;
+    copyBlockRows(src, 1, ROWS_PER_BLOCK, offset);
+    fillMechWeekBlock(src, w, offset);
   }
 }
 
-// 1週分のデータを機械設備シートに書き込む
-// テンプレ列: G=月, H=火, I=水, J=木, K=金 (1〜5週共通)
-// MECH_SECTIONS の各 field の row プロパティを行番号として使用
-function fillMechWeekSheet(ws, weekIdx) {
+// B-6 追加: 同一シート内で行範囲を別の位置にコピー
+// srcStartRow〜srcEndRow を destStartRow=srcStartRow+offset の位置にコピー
+function copyBlockRows(ws, srcStartRow, srcEndRow, offset) {
+  if (offset <= 0) return;
+  // セル値・スタイル・数式
+  for (let r = srcStartRow; r <= srcEndRow; r++) {
+    const srcRow = ws.getRow(r);
+    const destRow = ws.getRow(r + offset);
+    if (srcRow.height) destRow.height = srcRow.height;
+    srcRow.eachCell({ includeEmpty: true }, (cell, colNum) => {
+      const newCell = destRow.getCell(colNum);
+      if (cell.formula) {
+        // 数式の行参照を offset 分シフト
+        const newFormula = shiftFormulaRows(cell.formula, offset, srcStartRow, srcEndRow);
+        newCell.value = { formula: newFormula };
+      } else if (cell.value !== null && cell.value !== undefined) {
+        newCell.value = cell.value;
+      }
+      if (cell.style) {
+        try { newCell.style = JSON.parse(JSON.stringify(cell.style)); } catch (e) {
+          newCell.font = cell.font; newCell.alignment = cell.alignment;
+          newCell.border = cell.border; newCell.fill = cell.fill;
+          newCell.numFmt = cell.numFmt;
+        }
+      }
+      if (cell.numFmt) newCell.numFmt = cell.numFmt;
+    });
+  }
+
+  // 結合セルもオフセットして追加
+  if (ws.model && ws.model.merges) {
+    const newMerges = [];
+    ws.model.merges.forEach(merge => {
+      const m = merge.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+      if (m) {
+        const r1 = parseInt(m[2]);
+        const r2 = parseInt(m[4]);
+        if (r1 >= srcStartRow && r2 <= srcEndRow) {
+          newMerges.push(`${m[1]}${r1+offset}:${m[3]}${r2+offset}`);
+        }
+      }
+    });
+    newMerges.forEach(m => {
+      try { ws.mergeCells(m); } catch (e) {}
+    });
+  }
+}
+
+// 数式の行参照をシフト (簡易版: A1〜ZZ999 形式の参照を offset 分加算)
+function shiftFormulaRows(formula, offset, srcStartRow, srcEndRow) {
+  return formula.replace(/(\$?[A-Z]+\$?)(\d+)/g, function(match, col, row) {
+    const r = parseInt(row);
+    if (r >= srcStartRow && r <= srcEndRow) {
+      return col + (r + offset);
+    }
+    return match;  // 範囲外の参照はそのまま
+  });
+}
+
+// 1週分のデータを機械設備シートの指定行オフセットに書き込む (B-6 修正)
+function fillMechWeekBlock(ws, weekIdx, rowOffset) {
   const week = yoshiwaData.mech[weekIdx];
   if (!week || !week.days) return;
 
-  const DAY_COL = { mon: 7, tue: 8, wed: 9, thu: 10, fri: 11 };
-  // 振替適用後の活性日
+  // 機械設備のテンプレ列構造は E〜I (5〜9) = 月〜金
+  const DAY_COL = { mon: 5, tue: 6, wed: 7, thu: 8, fri: 9 };
   const activeDays = getActiveDays(week, weekIdx);
-  const subs = week.holidaySubstitutes || {};
 
-  // 振替元 → 振替先のマップ（書き込み先決定用）
-  // 例: subs={wed:"tue"} → 水曜のデータは火曜列に書く
-  const writeColMap = {};  // { mon:7, tue:8, ... } 通常通り
+  const writeColMap = {};
   EQUIP_DAYS.forEach(dk => {
     if (activeDays.indexOf(dk) >= 0) writeColMap[dk] = DAY_COL[dk];
   });
@@ -4560,13 +4626,18 @@ function fillMechWeekSheet(ws, weekIdx) {
     sec.fields.forEach(f => {
       EQUIP_DAYS.forEach(dk => {
         const col = writeColMap[dk];
-        if (!col) return;  // 非活性日
+        if (!col) return;
         const val = week.days[dk][f.key];
         if (val === null || val === undefined || val === "") return;
-        setCell(ws, f.row, col, val);
+        setCell(ws, f.row + rowOffset, col, val);  // rowOffset 加算
       });
     });
   });
+}
+
+// 1週分のデータを機械設備シートに書き込む (旧API、互換性維持)
+function fillMechWeekSheet(ws, weekIdx) {
+  fillMechWeekBlock(ws, weekIdx, 0);
 }
 
 // =====================================================
@@ -4584,31 +4655,30 @@ function fillElecSheet(wb) {
     const ws = monthWeeks[w - 1];
     if (!ws) continue;
     const hasMonthDays = [1,2,3,4,5].some(d => ws[d]);
-    if (hasMonthDays) activeWeeks.push(w);
+    if (!hasMonthDays) continue;
+    // B-6 修正: 実値がある週のみブロック追加
+    if (!hasAnyEquipDayData(wd)) continue;
+    activeWeeks.push(w);
   }
 
   if (activeWeeks.length === 0) return;
 
+  // B-6 修正: 1シート内に縦に積む方式
+  const ROWS_PER_BLOCK = src.actualRowCount;
+
   // 第1週の Q列用: 前月最終日データ
   let prevDayDataForWeek = getPrevMonthLastElecData();
 
-  // activeWeeks 順に処理し、各週の最終活性日データを次週に引き継ぐ
-  for (let i = 0; i < activeWeeks.length; i++) {
+  // 第1週: 元位置に書き込み (offset=0)
+  fillElecWeekBlock(src, activeWeeks[0], prevDayDataForWeek, 0);
+  prevDayDataForWeek = getLastActiveDayElecData(activeWeeks[0]);
+
+  // 第2週以降: ブロックコピー + 書き込み
+  for (let i = 1; i < activeWeeks.length; i++) {
     const w = activeWeeks[i];
-    let ws;
-    if (i === 0) {
-      // 元シートを第N週用に転用
-      src.name = SOURCE_NAME + " 第" + w + "週";
-      ws = src;
-    } else {
-      const newName = SOURCE_NAME + " 第" + w + "週";
-      ws = duplicateWorksheet(wb, SOURCE_NAME + " 第" + activeWeeks[0] + "週", newName);
-    }
-    if (!ws) continue;
-
-    fillElecWeekSheet(ws, w, prevDayDataForWeek);
-
-    // 次週のQ列用に、現在の週の最終活性日データを取得
+    const offset = ROWS_PER_BLOCK * i;
+    copyBlockRows(src, 1, ROWS_PER_BLOCK, offset);
+    fillElecWeekBlock(src, w, prevDayDataForWeek, offset);
     prevDayDataForWeek = getLastActiveDayElecData(w);
   }
 }
@@ -4619,17 +4689,17 @@ function getLastActiveDayElecData(weekIdx) {
   if (!week || !week.days) return null;
   const activeDays = getActiveDays(week, weekIdx);
   if (activeDays.length === 0) return null;
-  // activeDays は曜日順なので最後の要素が最終活性日
   const lastDk = activeDays[activeDays.length - 1];
   return week.days[lastDk] || null;
 }
 
-function fillElecWeekSheet(ws, weekIdx, prevDayData) {
+// 1週分のデータを電気設備シートの指定行オフセットに書き込む (B-6 修正)
+function fillElecWeekBlock(ws, weekIdx, prevDayData, rowOffset) {
   const week = yoshiwaData.elec[weekIdx];
   if (!week || !week.days) return;
 
   const DAY_COL = { mon: 7, tue: 8, wed: 9, thu: 10, fri: 11 };
-  const PREV_COL = 17;  // Q列 = 17
+  const PREV_COL = 17;  // Q列
   const activeDays = getActiveDays(week, weekIdx);
 
   const writeColMap = {};
@@ -4639,20 +4709,23 @@ function fillElecWeekSheet(ws, weekIdx, prevDayData) {
 
   ELEC_SECTIONS.forEach(sec => {
     sec.fields.forEach(f => {
-      // 通常データ: G〜K
       EQUIP_DAYS.forEach(dk => {
         const col = writeColMap[dk];
         if (!col) return;
         const val = week.days[dk][f.key];
         if (val === null || val === undefined || val === "") return;
-        setCell(ws, f.row, col, val);
+        setCell(ws, f.row + rowOffset, col, val);
       });
-      // Q列: 前週(or前月)最終活性日のデータ
       if (prevDayData && prevDayData[f.key] !== undefined && prevDayData[f.key] !== null && prevDayData[f.key] !== "") {
-        setCell(ws, f.row, PREV_COL, prevDayData[f.key]);
+        setCell(ws, f.row + rowOffset, PREV_COL, prevDayData[f.key]);
       }
     });
   });
+}
+
+// 旧API (互換性維持)
+function fillElecWeekSheet(ws, weekIdx, prevDayData) {
+  fillElecWeekBlock(ws, weekIdx, prevDayData, 0);
 }
 
 async function exportExcel() {
@@ -4742,6 +4815,26 @@ async function exportExcel() {
       }
       wb._worksheets = newWorksheets;
     } catch (e) { console.warn("シート順調整失敗:", e); }
+
+    // B-6 追加: 全シートのウィンドウ枠固定とタブ色を解除
+    try {
+      wb.eachSheet(ws => {
+        // ウィンドウ枠固定の解除
+        if (ws.views && ws.views.length > 0) {
+          ws.views = ws.views.map(v => {
+            const newView = Object.assign({}, v);
+            delete newView.state;
+            delete newView.xSplit;
+            delete newView.ySplit;
+            delete newView.topLeftCell;
+            delete newView.activeCell;
+            return newView;
+          });
+        }
+        // タブ色の解除
+        if (ws.properties) ws.properties.tabColor = undefined;
+      });
+    } catch (e) { console.warn("views/tabColor クリア失敗:", e); }
 
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });

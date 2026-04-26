@@ -2537,6 +2537,42 @@ async function uploadCurrentOnly() {
         results.saved += (data.saved || 0);
       }
     }
+  } else if (currentMain === 'mech') {
+    // B-4 追加: 機械設備（月単位、全週まとめて送信）
+    results.scope = '機械設備 第' + currentMechWeek + '週';
+    const mechData = yoshiwaData.mech || {};
+    if (Object.keys(mechData).length > 0) {
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(withTokenBody({
+          action: 'saveMech',
+          month: month,
+          mech: mechData
+        }))
+      }, 15000);
+      const data = await res.json();
+      if (data.error) throw new Error('機械設備: ' + data.error);
+      results.saved += (data.saved || 0);
+    }
+  } else if (currentMain === 'elec') {
+    // B-4 追加: 電気設備（月単位、全週まとめて送信）
+    results.scope = '電気設備 第' + currentElecWeek + '週';
+    const elecData = yoshiwaData.elec || {};
+    if (Object.keys(elecData).length > 0) {
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(withTokenBody({
+          action: 'saveElec',
+          month: month,
+          elec: elecData
+        }))
+      }, 15000);
+      const data = await res.json();
+      if (data.error) throw new Error('電気設備: ' + data.error);
+      results.saved += (data.saved || 0);
+    }
   }
 
   return results;
@@ -2557,7 +2593,7 @@ async function downloadFromServer(month) {
 
 // サーバーデータをローカルにマージ。何が更新されたかを返す
 function mergeServerData(serverData) {
-  const summary = { water_days: 0, aeration: false, mlss_return: false };
+  const summary = { water_days: 0, aeration: false, mlss_return: false, mech: false, elec: false };
   if (!serverData) return summary;
 
   // 水質週報: server.water → yoshiwaData.weeks
@@ -2599,6 +2635,16 @@ function mergeServerData(serverData) {
         summary.mlss_return = true;
       } catch(e) { console.error('mlss merge failed:', e); }
     }
+  }
+  // B-4 追加: 機械設備データ
+  if (serverData.mech && Object.keys(serverData.mech).length > 0) {
+    yoshiwaData.mech = serverData.mech;
+    summary.mech = true;
+  }
+  // B-4 追加: 電気設備データ
+  if (serverData.elec && Object.keys(serverData.elec).length > 0) {
+    yoshiwaData.elec = serverData.elec;
+    summary.elec = true;
   }
   return summary;
 }
@@ -2656,6 +2702,8 @@ async function syncAll() {
     if (summary.water_days > 0) parts.push('水質' + summary.water_days + '日分');
     if (summary.aeration) parts.push('エアレーション');
     if (summary.mlss_return) parts.push('返送汚泥MLSS');
+    if (summary.mech) parts.push('機械設備');
+    if (summary.elec) parts.push('電気設備');
     const detail = parts.length > 0 ? '（' + parts.join('、') + 'を更新）' : '（更新なし）';
     showToast('サーバーから最新データを取得しました' + detail);
 

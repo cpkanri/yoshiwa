@@ -4276,6 +4276,262 @@ function toExcelDate(date) {
   return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0));
 }
 
+// =====================================================
+// B-3 追加: シート複製ヘルパー
+// 機械・電気設備テンプレを5週分シートコピーするため
+// =====================================================
+function duplicateWorksheet(wb, sourceName, newName) {
+  const src = wb.getWorksheet(sourceName);
+  if (!src) return null;
+  const newWs = wb.addWorksheet(newName);
+
+  // 列幅
+  if (src.columns) {
+    src.columns.forEach((col, i) => {
+      if (col && col.width) {
+        newWs.getColumn(i + 1).width = col.width;
+      }
+    });
+  }
+
+  // 行高 + セル値・スタイル
+  src.eachRow({ includeEmpty: true }, (row, rowNum) => {
+    const newRow = newWs.getRow(rowNum);
+    if (row.height) newRow.height = row.height;
+    row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+      const newCell = newWs.getCell(rowNum, colNum);
+      // 値（数式は数式として保持）
+      if (cell.formula) {
+        newCell.value = { formula: cell.formula, result: cell.result };
+      } else if (cell.value !== null && cell.value !== undefined) {
+        newCell.value = cell.value;
+      }
+      // スタイルをディープコピー
+      if (cell.style) {
+        try {
+          newCell.style = JSON.parse(JSON.stringify(cell.style));
+        } catch (e) {
+          // 一部のスタイル(関数を含む)はJSON化不可。可能な部分だけコピー。
+          newCell.font = cell.font;
+          newCell.alignment = cell.alignment;
+          newCell.border = cell.border;
+          newCell.fill = cell.fill;
+          newCell.numFmt = cell.numFmt;
+        }
+      }
+      if (cell.numFmt) newCell.numFmt = cell.numFmt;
+    });
+  });
+
+  // 結合セル
+  if (src.model && src.model.merges) {
+    src.model.merges.forEach(merge => {
+      try { newWs.mergeCells(merge); } catch (e) {}
+    });
+  }
+
+  // ページ設定
+  if (src.pageSetup) {
+    Object.assign(newWs.pageSetup, src.pageSetup);
+  }
+
+  return newWs;
+}
+
+// =====================================================
+// B-3 追加: 前月最終日の電気設備データ取得（Q列用）
+// localStorage の前月分 yoshiwaData を読み、最終週の最終活性日のデータを返す
+// =====================================================
+function getPrevMonthLastElecData() {
+  const ym = yoshiwaData.targetMonth;
+  if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return null;
+  const [y, m] = ym.split("-").map(Number);
+  // 前月のYYYY-MM算出
+  const prevDate = new Date(y, m - 2, 1);  // m-2: month is 0-indexed, prev month
+  const prevYm = prevDate.getFullYear() + "-" + String(prevDate.getMonth() + 1).padStart(2, "0");
+  const prevKey = "yoshiwa_weekly_" + prevYm;
+
+  let prevData = null;
+  try {
+    const raw = localStorage.getItem(prevKey);
+    if (raw) prevData = JSON.parse(raw);
+  } catch (e) { return null; }
+
+  if (!prevData || !prevData.elec) return null;
+
+  // 前月の最終週から逆引き
+  for (let w = 5; w >= 1; w--) {
+    const wd = prevData.elec[w];
+    if (!wd || !wd.days) continue;
+    // 最終活性日を探す
+    const reverseDays = [...EQUIP_DAYS].reverse();
+    for (const dk of reverseDays) {
+      const day = wd.days[dk];
+      if (!day) continue;
+      // いずれかのフィールドに値があれば最終日とみなす
+      const hasValue = Object.values(day).some(v => v !== null && v !== undefined && v !== "");
+      if (hasValue) return day;
+    }
+  }
+  return null;
+}
+
+// =====================================================
+// B-3 追加: 機械設備シートの埋め込み
+// 元の「日常機械設備」シートを 第1〜第5週 にコピー、各週のデータを書き込み
+// =====================================================
+function fillMechSheet(wb) {
+  const SOURCE_NAME = "日常機械設備";
+  const src = wb.getWorksheet(SOURCE_NAME);
+  if (!src) return;
+
+  // データのある週のみ処理（空の週はシート作らない）
+  const activeWeeks = [];
+  for (let w = 1; w <= 5; w++) {
+    const wd = yoshiwaData.mech[w];
+    if (!wd || !wd.days) continue;
+    const ws = monthWeeks[w - 1];
+    if (!ws) continue;
+    // 月内の有効日があるか判定
+    const hasMonthDays = [1,2,3,4,5].some(d => ws[d]);
+    if (hasMonthDays) activeWeeks.push(w);
+  }
+
+  if (activeWeeks.length === 0) {
+    // データなし: 元シートはそのまま残す
+    return;
+  }
+
+  // 元シートを 第1週用に転用、第2〜第5週は複製
+  src.name = SOURCE_NAME + " 第" + activeWeeks[0] + "週";
+  fillMechWeekSheet(src, activeWeeks[0]);
+
+  for (let i = 1; i < activeWeeks.length; i++) {
+    const w = activeWeeks[i];
+    const newName = SOURCE_NAME + " 第" + w + "週";
+    const newWs = duplicateWorksheet(wb, src.name, newName);
+    if (newWs) fillMechWeekSheet(newWs, w);
+  }
+}
+
+// 1週分のデータを機械設備シートに書き込む
+// テンプレ列: G=月, H=火, I=水, J=木, K=金 (1〜5週共通)
+// MECH_SECTIONS の各 field の row プロパティを行番号として使用
+function fillMechWeekSheet(ws, weekIdx) {
+  const week = yoshiwaData.mech[weekIdx];
+  if (!week || !week.days) return;
+
+  const DAY_COL = { mon: 7, tue: 8, wed: 9, thu: 10, fri: 11 };
+  // 振替適用後の活性日
+  const activeDays = getActiveDays(week, weekIdx);
+  const subs = week.holidaySubstitutes || {};
+
+  // 振替元 → 振替先のマップ（書き込み先決定用）
+  // 例: subs={wed:"tue"} → 水曜のデータは火曜列に書く
+  const writeColMap = {};  // { mon:7, tue:8, ... } 通常通り
+  EQUIP_DAYS.forEach(dk => {
+    if (activeDays.indexOf(dk) >= 0) writeColMap[dk] = DAY_COL[dk];
+  });
+
+  MECH_SECTIONS.forEach(sec => {
+    sec.fields.forEach(f => {
+      EQUIP_DAYS.forEach(dk => {
+        const col = writeColMap[dk];
+        if (!col) return;  // 非活性日
+        const val = week.days[dk][f.key];
+        if (val === null || val === undefined || val === "") return;
+        setCell(ws, f.row, col, val);
+      });
+    });
+  });
+}
+
+// =====================================================
+// B-3 追加: 電気設備シートの埋め込み
+// =====================================================
+function fillElecSheet(wb) {
+  const SOURCE_NAME = "日常電気設備";
+  const src = wb.getWorksheet(SOURCE_NAME);
+  if (!src) return;
+
+  const activeWeeks = [];
+  for (let w = 1; w <= 5; w++) {
+    const wd = yoshiwaData.elec[w];
+    if (!wd || !wd.days) continue;
+    const ws = monthWeeks[w - 1];
+    if (!ws) continue;
+    const hasMonthDays = [1,2,3,4,5].some(d => ws[d]);
+    if (hasMonthDays) activeWeeks.push(w);
+  }
+
+  if (activeWeeks.length === 0) return;
+
+  // 第1週の Q列用: 前月最終日データ
+  let prevDayDataForWeek = getPrevMonthLastElecData();
+
+  // activeWeeks 順に処理し、各週の最終活性日データを次週に引き継ぐ
+  for (let i = 0; i < activeWeeks.length; i++) {
+    const w = activeWeeks[i];
+    let ws;
+    if (i === 0) {
+      // 元シートを第N週用に転用
+      src.name = SOURCE_NAME + " 第" + w + "週";
+      ws = src;
+    } else {
+      const newName = SOURCE_NAME + " 第" + w + "週";
+      ws = duplicateWorksheet(wb, SOURCE_NAME + " 第" + activeWeeks[0] + "週", newName);
+    }
+    if (!ws) continue;
+
+    fillElecWeekSheet(ws, w, prevDayDataForWeek);
+
+    // 次週のQ列用に、現在の週の最終活性日データを取得
+    prevDayDataForWeek = getLastActiveDayElecData(w);
+  }
+}
+
+// 指定週の最終活性日（祝日振替後）の電気データを返す
+function getLastActiveDayElecData(weekIdx) {
+  const week = yoshiwaData.elec[weekIdx];
+  if (!week || !week.days) return null;
+  const activeDays = getActiveDays(week, weekIdx);
+  if (activeDays.length === 0) return null;
+  // activeDays は曜日順なので最後の要素が最終活性日
+  const lastDk = activeDays[activeDays.length - 1];
+  return week.days[lastDk] || null;
+}
+
+function fillElecWeekSheet(ws, weekIdx, prevDayData) {
+  const week = yoshiwaData.elec[weekIdx];
+  if (!week || !week.days) return;
+
+  const DAY_COL = { mon: 7, tue: 8, wed: 9, thu: 10, fri: 11 };
+  const PREV_COL = 17;  // Q列 = 17
+  const activeDays = getActiveDays(week, weekIdx);
+
+  const writeColMap = {};
+  EQUIP_DAYS.forEach(dk => {
+    if (activeDays.indexOf(dk) >= 0) writeColMap[dk] = DAY_COL[dk];
+  });
+
+  ELEC_SECTIONS.forEach(sec => {
+    sec.fields.forEach(f => {
+      // 通常データ: G〜K
+      EQUIP_DAYS.forEach(dk => {
+        const col = writeColMap[dk];
+        if (!col) return;
+        const val = week.days[dk][f.key];
+        if (val === null || val === undefined || val === "") return;
+        setCell(ws, f.row, col, val);
+      });
+      // Q列: 前週(or前月)最終活性日のデータ
+      if (prevDayData && prevDayData[f.key] !== undefined && prevDayData[f.key] !== null && prevDayData[f.key] !== "") {
+        setCell(ws, f.row, PREV_COL, prevDayData[f.key]);
+      }
+    });
+  });
+}
+
 async function exportExcel() {
   const btn = document.getElementById("btnExcel");
   const origText = btn.textContent;
@@ -4305,17 +4561,41 @@ async function exportExcel() {
     fillQualityReportSheet(wb, yyyy, mm);
     // 運転管理月報
     fillOperationReportSheet(wb, yyyy, mm);
+    // B-3 追加: 機械設備（5週分シートコピー）
+    try { fillMechSheet(wb); } catch (e) { console.error("fillMechSheet:", e); }
+    // B-3 追加: 電気設備（5週分シートコピー）
+    try { fillElecSheet(wb); } catch (e) { console.error("fillElecSheet:", e); }
 
     // シート順調整
     try {
+      // B-3: 機械・電気は週ごとに複製されるため、動的に名前を取得
+      const mechSheets = [];
+      const elecSheets = [];
+      if (wb._worksheets) {
+        wb._worksheets.forEach(s => {
+          if (!s) return;
+          if (typeof s.name === "string") {
+            if (s.name.startsWith("日常機械設備")) mechSheets.push(s.name);
+            else if (s.name.startsWith("日常電気設備")) elecSheets.push(s.name);
+          }
+        });
+      }
+      // 第N週順にソート（数値で比較）
+      const weekNumOf = (name) => {
+        const m = name.match(/第(\d+)週/);
+        return m ? Number(m[1]) : 99;
+      };
+      mechSheets.sort((a, b) => weekNumOf(a) - weekNumOf(b));
+      elecSheets.sort((a, b) => weekNumOf(a) - weekNumOf(b));
+
       const orderedNames = [
         "鏡",
         "故障一覧表",
         "水質週報",
         "水質管理報告、新",
         "運転管理月報",
-        "日常機械設備",
-        "日常電気設備",
+        ...mechSheets,
+        ...elecSheets,
         "月例機械設備",
         "月例電気設備"
       ];

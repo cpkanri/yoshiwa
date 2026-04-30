@@ -2797,7 +2797,9 @@ async function syncAll() {
     saveToStorage();
 
     // 画面再描画
-    if (typeof loadDataToForm === 'function') loadDataToForm();
+    // B-6: 全タブを再描画して、サーバー新データを確実に反映
+    if (typeof renderAll === 'function') renderAll();
+    else if (typeof loadDataToForm === 'function') loadDataToForm();
     if (typeof renderStorageBadge === 'function') renderStorageBadge();
 
     if (btn) {

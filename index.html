@@ -319,6 +319,8 @@ input[type="number"] {
 .btn-copy { background: #e8f0f7; color: #1a4f8a; }
 .btn-clear { background: #ffebee; color: #c62828; }
 .btn-clear-all { background: #b71c1c; color: #fff; box-shadow: 0 2px 6px rgba(183,28,28,0.3); }
+.btn-undo { background: #fff3e0; color: #e65100; border: 1px solid #ffb74d; }
+.btn-undo:disabled { cursor: not-allowed; }
 .btn-save { background: #1a4f8a; color: #fff; box-shadow: 0 2px 6px rgba(26,79,138,0.25); transition: background 0.2s; }
 .btn-save.unsaved {
   background: #f57c00;  /* B-6: 未保存時はオレンジで強調 */
@@ -1158,6 +1160,7 @@ body.login-active { overflow: hidden; }
 <!-- 操作ボタン -->
 <div class="actions">
   <button type="button" class="btn-copy" id="btnCopy">前日コピー</button>
+  <button type="button" class="btn-undo" id="btnUndo" title="直前の操作を元に戻す">↶ 元に戻す</button>
   <button type="button" class="btn-clear" id="btnClear">クリア</button>
   <button type="button" class="btn-clear-all" id="btnClearAll" title="当月の全タブの全データをクリア">全クリア</button>
   <button type="button" class="btn-save" id="btnSave" title="現在のタブ・週のデータをサーバーに送信">保存</button>
@@ -2219,6 +2222,60 @@ let currentAnnualSub = "aeration"; // aeration | mlss_return
 let currentMlssWeek = 1;
 let currentMlssDay = 1;
 let isDirty = false;
+
+// B-6: 元に戻す機能用のスナップショットスタック（最大10件）
+let undoStack = [];
+const UNDO_MAX = 10;
+
+// 現在の全データの完全コピーを取る
+function snapshotData() {
+  return {
+    yoshiwa: JSON.parse(JSON.stringify(yoshiwaData)),
+    annual: JSON.parse(JSON.stringify(annualData)),
+    label: ''
+  };
+}
+
+// クリア・コピーなど大きな変更前にスナップショットを保存
+function pushUndo(label) {
+  const snap = snapshotData();
+  snap.label = label || '操作前';
+  undoStack.push(snap);
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+  updateUndoButton();
+}
+
+// 元に戻す
+function performUndo() {
+  if (undoStack.length === 0) {
+    showToast("元に戻せる操作がありません");
+    return;
+  }
+  const snap = undoStack.pop();
+  yoshiwaData = snap.yoshiwa;
+  annualData = snap.annual;
+  ensureStructure();
+  saveToStorage();
+  renderAll();
+  markDirty();
+  updateUndoButton();
+  showToast("「" + snap.label + "」を元に戻しました");
+}
+
+function updateUndoButton() {
+  const btn = document.getElementById("btnUndo");
+  if (!btn) return;
+  if (undoStack.length === 0) {
+    btn.disabled = true;
+    btn.style.opacity = "0.4";
+    btn.title = "元に戻す操作がありません";
+  } else {
+    btn.disabled = false;
+    btn.style.opacity = "1";
+    const last = undoStack[undoStack.length - 1];
+    btn.title = "「" + last.label + "」を元に戻す（残り " + undoStack.length + " 件）";
+  }
+}
 
 // 年報用データ（メモリ上の作業領域）
 // aeration:   { "YYYY-MM": { days: { "1": {"1-1":3.5,"1-2":12.0,"2-1":0,"2-2":8.5}, "5": {"1-1":4.0}, ... } } }
@@ -4646,6 +4703,7 @@ function showToast(msg, type) {
 function copyFromPrevDay() {
   if (currentDay <= 1) { showToast("前日が存在しません", "error"); return; }
   saveFormToData();
+  pushUndo("前日コピー");
   const prev = yoshiwaData.weeks[currentWeek][currentDay - 1];
   const curr = yoshiwaData.weeks[currentWeek][currentDay];
   const fields = currentSection === "upper" ? YOSHIWA_FIELDS.upper_section.fields : YOSHIWA_FIELDS.lower_section.fields;
@@ -4662,6 +4720,7 @@ function copyFromPrevDay() {
 // ===== 全クリア (現在のセクション/日) =====
 function clearCurrentSection() {
   if (!confirm("現在の日のこのセクションをクリアしますか？")) return;
+  pushUndo("クリア（水質週報）");
   const cell = yoshiwaData.weeks[currentWeek][currentDay];
   const fields = currentSection === "upper" ? YOSHIWA_FIELDS.upper_section.fields : YOSHIWA_FIELDS.lower_section.fields;
   fields.forEach(f => { cell[f.id] = f.id === "inspector" ? "" : null; });
@@ -6141,6 +6200,12 @@ function bindEvents() {
   if (btnClearAll) {
     btnClearAll.addEventListener("click", () => clearAllTabs());
   }
+  // B-6: 元に戻す
+  const btnUndo = document.getElementById("btnUndo");
+  if (btnUndo) {
+    btnUndo.addEventListener("click", () => performUndo());
+    updateUndoButton();  // 初期状態
+  }
   document.getElementById("btnExcel").addEventListener("click", exportExcel);
   document.getElementById("btnYearExcel").addEventListener("click", exportYearExcel);
 
@@ -6153,6 +6218,7 @@ function bindEvents() {
 function clearCurrentAnnual() {
   if (currentAnnualSub === "aeration") {
     if (!confirm("当月のエアレーション運転時間データをすべてクリアしますか？")) return;
+    pushUndo("クリア（エアレーション）");
     const ym = yoshiwaData.targetMonth;
     if (!ym) return;
     ensureAerationForMonth(ym);
@@ -6160,6 +6226,7 @@ function clearCurrentAnnual() {
     renderAll();
   } else {
     if (!confirm("現在の項目をクリアしますか？")) return;
+    pushUndo("クリア（MLSS）");
     // MLSS: 現在の日をクリア
     const ym = yoshiwaData.targetMonth;
     if (!ym) return;
@@ -6178,6 +6245,7 @@ function clearCurrentMech() {
   const dayKey = DAY_NUM_TO_STR[currentDay] || "mon";
   if (!confirm("機械設備 第" + w + "週 " + dayKey + "曜日のデータをクリアしますか？")) return;
   if (!yoshiwaData.mech || !yoshiwaData.mech[w] || !yoshiwaData.mech[w].days || !yoshiwaData.mech[w].days[dayKey]) return;
+  pushUndo("クリア（機械設備 第" + w + "週 " + dayKey + "）");
   Object.keys(yoshiwaData.mech[w].days[dayKey]).forEach(k => {
     yoshiwaData.mech[w].days[dayKey][k] = null;
   });
@@ -6192,6 +6260,7 @@ function clearCurrentElec() {
   const dayKey = DAY_NUM_TO_STR[currentDay] || "tue";
   if (!confirm("電気設備 第" + w + "週 " + dayKey + "曜日のデータをクリアしますか？")) return;
   if (!yoshiwaData.elec || !yoshiwaData.elec[w] || !yoshiwaData.elec[w].days || !yoshiwaData.elec[w].days[dayKey]) return;
+  pushUndo("クリア（電気設備 第" + w + "週 " + dayKey + "）");
   Object.keys(yoshiwaData.elec[w].days[dayKey]).forEach(k => {
     yoshiwaData.elec[w].days[dayKey][k] = null;
   });
@@ -6206,6 +6275,7 @@ function clearAllTabs() {
   // 二重確認（重要操作なので念入りに）
   if (!confirm("本当にすべてクリアしてよろしいですか？\n\n保存されていないデータも消えます。")) return;
 
+  pushUndo("全クリア（全タブ）");
   const ym = yoshiwaData.targetMonth;
 
   // 1. 水質週報をクリア

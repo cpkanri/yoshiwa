@@ -3001,12 +3001,8 @@ function loadDataToForm() {
       el.dataset.val = val;
       el.textContent = val || "―";
     } else {
-      // dashSupport フィールドは空値時に「-」を表示（メーター不読時の既定値）
-      if ((v === null || v === undefined || v === "") && DASH_SUPPORT_FIELDS.has(key) && el.type === "text") {
-        el.value = "-";
-      } else {
-        el.value = (v === null || v === undefined) ? "" : v;
-      }
+      // B-6: 空値時はそのまま空欄表示（以前は dashSupport フィールドに「-」を自動表示していた）
+      el.value = (v === null || v === undefined) ? "" : v;
     }
   });
 
@@ -3238,7 +3234,7 @@ function renderForm() {
       if (f.type === "number") {
         if (f.dashSupport) {
           // 流量計など「-」入力可能なフィールドは text として描画
-          html += `<input type="text" inputmode="decimal" data-field="${f.id}" placeholder="-">`;
+          html += `<input type="text" inputmode="decimal" data-field="${f.id}">`;
         } else {
           html += `<input type="number" inputmode="decimal" step="${f.step || "1"}" data-field="${f.id}">`;
         }
@@ -3532,7 +3528,7 @@ function buildEquipTableBody(kind, part, weekIdx) {
         if (f.type === "number") {
           html += `<td${tdCls}><input type="number" inputmode="decimal" step="${f.step || '1'}" ${dataAttr}="${f.key}" ${dayAttr}="${dk}"${disabledAttr}></td>`;
         } else if (f.type === "text") {
-          html += `<td${tdCls}><input type="text" inputmode="${f.inputmode || 'decimal'}" ${dataAttr}="${f.key}" ${dayAttr}="${dk}" placeholder="${f.placeholder || ''}"${disabledAttr}></td>`;
+          html += `<td${tdCls}><input type="text" inputmode="${f.inputmode || 'decimal'}" ${dataAttr}="${f.key}" ${dayAttr}="${dk}"${disabledAttr}></td>`;
         } else if (f.type === "toggle") {
           const opts = JSON.stringify(f.options || []).replace(/"/g, '&quot;');
           html += `<td${tdCls}><button type="button" class="toggle-btn" ${dataAttr}="${f.key}" ${dayAttr}="${dk}" data-options="${opts}"${disabledAttr}>―</button></td>`;
@@ -3682,13 +3678,8 @@ function loadEquipDataToForm(kind) {
     const v = (week.days[day] && key in week.days[day]) ? week.days[day][key] : null;
 
     if (el.tagName === "INPUT") {
-      // text 型で「-」を空値時にデフォルト表示するか判定（吉和は流量計系のみ）
-      const isDashField = (el.type === "text" && el.placeholder === "-");
-      if (v === null || v === undefined || v === "") {
-        el.value = isDashField ? "-" : "";
-      } else {
-        el.value = v;
-      }
+      // B-6: 空値時はそのまま空欄表示（以前は placeholder=- フィールドに「-」を自動表示していた）
+      el.value = (v === null || v === undefined) ? "" : v;
     } else if (el.tagName === "BUTTON" && el.classList.contains("toggle-btn")) {
       const val = (v === null || v === undefined) ? "" : String(v);
       el.dataset.val = val;

@@ -318,6 +318,7 @@ input[type="number"] {
 }
 .btn-copy { background: #e8f0f7; color: #1a4f8a; }
 .btn-clear { background: #ffebee; color: #c62828; }
+.btn-clear-all { background: #b71c1c; color: #fff; box-shadow: 0 2px 6px rgba(183,28,28,0.3); }
 .btn-save { background: #1a4f8a; color: #fff; box-shadow: 0 2px 6px rgba(26,79,138,0.25); transition: background 0.2s; }
 .btn-save.unsaved {
   background: #f57c00;  /* B-6: 未保存時はオレンジで強調 */
@@ -1158,6 +1159,7 @@ body.login-active { overflow: hidden; }
 <div class="actions">
   <button type="button" class="btn-copy" id="btnCopy">前日コピー</button>
   <button type="button" class="btn-clear" id="btnClear">クリア</button>
+  <button type="button" class="btn-clear-all" id="btnClearAll" title="当月の全タブの全データをクリア">全クリア</button>
   <button type="button" class="btn-save" id="btnSave" title="現在のタブ・週のデータをサーバーに送信">保存</button>
   <button type="button" class="btn-excel" id="btnExcel">📥 月報Excel</button>
   <button type="button" class="btn-excel" id="btnYearExcel" style="background:#1a4f8a;display:none;">📊 年報Excel</button>
@@ -6126,10 +6128,19 @@ function bindEvents() {
   document.getElementById("btnClear").addEventListener("click", () => {
     if (currentMain === "weekly") {
       clearCurrentSection();
+    } else if (currentMain === "mech") {
+      clearCurrentMech();
+    } else if (currentMain === "elec") {
+      clearCurrentElec();
     } else {
       clearCurrentAnnual();
     }
   });
+  // B-6: 全タブ一括クリア
+  const btnClearAll = document.getElementById("btnClearAll");
+  if (btnClearAll) {
+    btnClearAll.addEventListener("click", () => clearAllTabs());
+  }
   document.getElementById("btnExcel").addEventListener("click", exportExcel);
   document.getElementById("btnYearExcel").addEventListener("click", exportYearExcel);
 
@@ -6159,6 +6170,108 @@ function clearCurrentAnnual() {
   }
   markDirty();
   showToast("クリアしました");
+}
+
+// B-6: 機械設備の現在の日のみをクリア
+function clearCurrentMech() {
+  const w = currentMechWeek;
+  const dayKey = DAY_NUM_TO_STR[currentDay] || "mon";
+  if (!confirm("機械設備 第" + w + "週 " + dayKey + "曜日のデータをクリアしますか？")) return;
+  if (!yoshiwaData.mech || !yoshiwaData.mech[w] || !yoshiwaData.mech[w].days || !yoshiwaData.mech[w].days[dayKey]) return;
+  Object.keys(yoshiwaData.mech[w].days[dayKey]).forEach(k => {
+    yoshiwaData.mech[w].days[dayKey][k] = null;
+  });
+  renderAll();
+  markDirty();
+  showToast("機械設備 第" + w + "週 " + dayKey + "曜日をクリアしました");
+}
+
+// B-6: 電気設備の現在の日のみをクリア
+function clearCurrentElec() {
+  const w = currentElecWeek;
+  const dayKey = DAY_NUM_TO_STR[currentDay] || "tue";
+  if (!confirm("電気設備 第" + w + "週 " + dayKey + "曜日のデータをクリアしますか？")) return;
+  if (!yoshiwaData.elec || !yoshiwaData.elec[w] || !yoshiwaData.elec[w].days || !yoshiwaData.elec[w].days[dayKey]) return;
+  Object.keys(yoshiwaData.elec[w].days[dayKey]).forEach(k => {
+    yoshiwaData.elec[w].days[dayKey][k] = null;
+  });
+  renderAll();
+  markDirty();
+  showToast("電気設備 第" + w + "週 " + dayKey + "曜日をクリアしました");
+}
+
+// B-6 追加: 全タブの全データを一括クリア
+function clearAllTabs() {
+  if (!confirm("⚠️ 当月のすべてのデータ（水質週報・機械・電気・エアレーション・MLSS）を完全にクリアします。\n\nこの操作は取り消せません。よろしいですか？")) return;
+  // 二重確認（重要操作なので念入りに）
+  if (!confirm("本当にすべてクリアしてよろしいですか？\n\n保存されていないデータも消えます。")) return;
+
+  const ym = yoshiwaData.targetMonth;
+
+  // 1. 水質週報をクリア
+  for (let w = 1; w <= 5; w++) {
+    if (yoshiwaData.weeks[w]) {
+      for (let d = 1; d <= 5; d++) {
+        const cell = yoshiwaData.weeks[w][d];
+        if (cell) {
+          Object.keys(cell).forEach(k => {
+            cell[k] = (k === "inspector") ? "" : null;
+          });
+        }
+      }
+    }
+  }
+
+  // 2. 機械設備をクリア
+  for (let w = 1; w <= 5; w++) {
+    if (yoshiwaData.mech[w] && yoshiwaData.mech[w].days) {
+      EQUIP_DAYS.forEach(dk => {
+        if (yoshiwaData.mech[w].days[dk]) {
+          Object.keys(yoshiwaData.mech[w].days[dk]).forEach(k => {
+            yoshiwaData.mech[w].days[dk][k] = null;
+          });
+        }
+      });
+      if (yoshiwaData.mech[w].holidaySubstitutes) yoshiwaData.mech[w].holidaySubstitutes = {};
+    }
+  }
+
+  // 3. 電気設備をクリア
+  for (let w = 1; w <= 5; w++) {
+    if (yoshiwaData.elec[w] && yoshiwaData.elec[w].days) {
+      EQUIP_DAYS.forEach(dk => {
+        if (yoshiwaData.elec[w].days[dk]) {
+          Object.keys(yoshiwaData.elec[w].days[dk]).forEach(k => {
+            yoshiwaData.elec[w].days[dk][k] = null;
+          });
+        }
+      });
+      if (yoshiwaData.elec[w].holidaySubstitutes) yoshiwaData.elec[w].holidaySubstitutes = {};
+    }
+  }
+
+  // 4. エアレーションをクリア
+  if (ym && annualData.aeration[ym]) {
+    annualData.aeration[ym].days = {};
+  }
+
+  // 5. MLSS をクリア
+  if (ym && annualData.mlssReturn[ym]) {
+    for (let w = 1; w <= 5; w++) {
+      if (annualData.mlssReturn[ym].weeks[w]) {
+        for (let d = 1; d <= 5; d++) {
+          const rec = annualData.mlssReturn[ym].weeks[w][d];
+          if (rec) {
+            YOSHIWA_ANNUAL.mlss_return.fields.forEach(f => { rec[f.id] = null; });
+          }
+        }
+      }
+    }
+  }
+
+  renderAll();
+  markDirty();
+  showToast("すべてのデータをクリアしました（保存ボタンでサーバーにも反映）");
 }
 
 // ===== 初期化 =====

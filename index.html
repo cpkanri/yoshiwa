@@ -2554,6 +2554,138 @@ async function uploadToServer() {
   return results;
 }
 
+// B-6 追加: 全タブ全データを一括でサーバーに送信（保存ボタンの新動作）
+async function uploadAllTabs() {
+  const month = yoshiwaData.targetMonth;
+  if (!month) throw new Error('対象年月が未設定です');
+
+  const results = { saved: 0, scopes: [] };
+
+  // 1. 水質週報（全週まとめて）
+  if (yoshiwaData.weeks && Object.keys(yoshiwaData.weeks).length > 0) {
+    let hasWaterData = false;
+    for (const w in yoshiwaData.weeks) {
+      const weekData = yoshiwaData.weeks[w];
+      if (weekData) {
+        for (const d in weekData) {
+          const day = weekData[d];
+          if (day && typeof day === 'object') {
+            for (const k in day) {
+              if (day[k] !== null && day[k] !== undefined && day[k] !== '') {
+                hasWaterData = true; break;
+              }
+            }
+            if (hasWaterData) break;
+          }
+        }
+        if (hasWaterData) break;
+      }
+    }
+    if (hasWaterData) {
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(withTokenBody({
+          action: 'saveAll',
+          month: month,
+          startDate: yoshiwaData.startDate || '',
+          weeks: yoshiwaData.weeks
+        }))
+      }, 30000);
+      const data = await res.json();
+      if (data.error) throw new Error('水質週報: ' + data.error);
+      results.saved += (data.saved || 0);
+      results.scopes.push('水質週報');
+    }
+  }
+
+  // 2. 機械設備
+  const mechData = yoshiwaData.mech || {};
+  if (hasAnyEquipData(mechData)) {
+    const res = await fetchWithTimeout(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(withTokenBody({
+        action: 'saveMech',
+        month: month,
+        mech: mechData
+      }))
+    }, 30000);
+    const data = await res.json();
+    if (data.error) throw new Error('機械設備: ' + data.error);
+    results.saved += (data.saved || 0);
+    results.scopes.push('機械設備');
+  }
+
+  // 3. 電気設備
+  const elecData = yoshiwaData.elec || {};
+  if (hasAnyEquipData(elecData)) {
+    const res = await fetchWithTimeout(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(withTokenBody({
+        action: 'saveElec',
+        month: month,
+        elec: elecData
+      }))
+    }, 30000);
+    const data = await res.json();
+    if (data.error) throw new Error('電気設備: ' + data.error);
+    results.saved += (data.saved || 0);
+    results.scopes.push('電気設備');
+  }
+
+  // 4. エアレーション
+  const aerationKey = 'yoshiwa_aeration_' + month;
+  const aerationRaw = localStorage.getItem(aerationKey);
+  if (aerationRaw) {
+    try {
+      const aerationData = JSON.parse(aerationRaw);
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(withTokenBody({
+          action: 'saveAeration',
+          month: month,
+          aeration: aerationData
+        }))
+      }, 20000);
+      const data = await res.json();
+      if (data.error) throw new Error('エアレーション: ' + data.error);
+      results.saved += (data.saved || 0);
+      results.scopes.push('エアレーション');
+    } catch(e) {
+      if (e.message && e.message.indexOf('エアレーション') === 0) throw e;
+    }
+  }
+
+  // 5. 返送汚泥MLSS
+  const mlssKey = 'yoshiwa_mlss_return_' + month;
+  const mlssRaw = localStorage.getItem(mlssKey);
+  if (mlssRaw) {
+    try {
+      const mlssData = JSON.parse(mlssRaw);
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(withTokenBody({
+          action: 'saveMlssReturn',
+          month: month,
+          mlss_return: mlssData
+        }))
+      }, 20000);
+      const data = await res.json();
+      if (data.error) throw new Error('返送汚泥MLSS: ' + data.error);
+      results.saved += (data.saved || 0);
+      results.scopes.push('返送汚泥MLSS');
+    } catch(e) {
+      if (e.message && e.message.indexOf('返送汚泥') === 0) throw e;
+    }
+  }
+
+  return results;
+}
+
 // サーバーへデータ送信（現タブ・現週のみの軽量版）
 // 保存ボタンから呼ばれる。戻り値の scope でトースト表記に使う
 async function uploadCurrentOnly() {
@@ -5956,39 +6088,28 @@ function bindEvents() {
   document.getElementById("btnSave").addEventListener("click", async () => {
     const btnSave = document.getElementById("btnSave");
 
-    // 1. スコープ文字列を先に決定（エラー時のトースト用）
-    let scope = '';
-    if (currentMain === 'weekly') {
-      scope = '第' + currentWeek + '週';
-    } else if (currentMain === 'mech') {
-      scope = '機械設備 第' + currentMechWeek + '週';
-    } else if (currentMain === 'elec') {
-      scope = '電気設備 第' + currentElecWeek + '週';
-    } else if (currentMain === 'annual') {
-      scope = currentAnnualSub === 'aeration' ? 'エアレーション' : '返送汚泥MLSS';
-    }
-
-    // 2. ローカル保存
+    // B-6: ローカル保存
     if (!saveToStorage()) {
       showToast("保存に失敗しました", "error");
       return;
     }
 
-    // 3. サーバーへアップロード
+    // B-6: 全タブ一括送信に変更（タブごとの保存漏れ防止）
     btnSave.disabled = true;
     const origText = btnSave.textContent;
     btnSave.textContent = "送信中...";
     try {
-      await uploadCurrentOnly();
+      const result = await uploadAllTabs();
       markClean();
       setConnectionStatus(true);
-      showToast(scope + "を保存しました（サーバーへ送信完了）");
+      const scopeText = result.scopes.length > 0 ? result.scopes.join('・') : '（送信データなし）';
+      showToast("保存しました（" + scopeText + "）");
     } catch (e) {
       console.warn("サーバー送信失敗:", e);
       markClean();
       setConnectionStatus(false);
       showToast(
-        "端末に" + scope + "を保存しました。サーバー送信失敗：" + (e.message || 'ネットワークエラー') + "（後で同期してください）",
+        "端末に保存しました。サーバー送信失敗：" + (e.message || 'ネットワークエラー') + "（後で同期してください）",
         "warn"
       );
     } finally {

@@ -321,6 +321,7 @@ input[type="number"] {
 .btn-clear-all { background: #b71c1c; color: #fff; box-shadow: 0 2px 6px rgba(183,28,28,0.3); }
 .btn-undo { background: #fff3e0; color: #e65100; border: 1px solid #ffb74d; }
 .btn-undo:disabled { cursor: not-allowed; }
+.btn-history { background: #e3f2fd; color: #1565c0; border: 1px solid #64b5f6; }
 .btn-save { background: #1a4f8a; color: #fff; box-shadow: 0 2px 6px rgba(26,79,138,0.25); transition: background 0.2s; }
 .btn-save.unsaved {
   background: #f57c00;  /* B-6: 未保存時はオレンジで強調 */
@@ -1163,6 +1164,7 @@ body.login-active { overflow: hidden; }
   <button type="button" class="btn-undo" id="btnUndo" title="直前の操作を元に戻す">↶ 元に戻す</button>
   <button type="button" class="btn-clear" id="btnClear">クリア</button>
   <button type="button" class="btn-clear-all" id="btnClearAll" title="当月の全タブの全データをクリア">全クリア</button>
+  <button type="button" class="btn-history" id="btnHistory" title="保存履歴を表示">📋 履歴</button>
   <button type="button" class="btn-save" id="btnSave" title="現在のタブ・週のデータをサーバーに送信">保存</button>
   <button type="button" class="btn-excel" id="btnExcel">📥 月報Excel</button>
   <button type="button" class="btn-excel" id="btnYearExcel" style="background:#1a4f8a;display:none;">📊 年報Excel</button>
@@ -2223,6 +2225,128 @@ let currentMlssWeek = 1;
 let currentMlssDay = 1;
 let isDirty = false;
 
+// B-6: 保存履歴（最新50件、localStorage に保存）
+const SAVE_HISTORY_KEY = 'yoshiwa_save_history';
+const SAVE_HISTORY_MAX = 50;
+
+function loadSaveHistory() {
+  try {
+    const raw = localStorage.getItem(SAVE_HISTORY_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return [];
+}
+
+function appendSaveHistory(entry) {
+  const history = loadSaveHistory();
+  history.unshift(entry);  // 新しいものを先頭に
+  if (history.length > SAVE_HISTORY_MAX) history.length = SAVE_HISTORY_MAX;
+  try {
+    localStorage.setItem(SAVE_HISTORY_KEY, JSON.stringify(history));
+  } catch (e) { console.warn('保存履歴の書込失敗:', e); }
+}
+
+function recordSaveLog(action, scopes, status, errorMsg) {
+  const now = new Date();
+  const ts = now.getFullYear() + '/' +
+    String(now.getMonth() + 1).padStart(2, '0') + '/' +
+    String(now.getDate()).padStart(2, '0') + ' ' +
+    String(now.getHours()).padStart(2, '0') + ':' +
+    String(now.getMinutes()).padStart(2, '0') + ':' +
+    String(now.getSeconds()).padStart(2, '0');
+  const entry = {
+    timestamp: ts,
+    action: action,           // "保存" / "同期" / "クリア" / "全クリア"
+    targetMonth: yoshiwaData.targetMonth || '',
+    scopes: scopes || [],     // ["水質週報", "機械設備", "電気設備"] など
+    status: status || 'success', // 'success' / 'error' / 'partial'
+    errorMsg: errorMsg || '',
+    user: window.currentUserId || '不明'
+  };
+  appendSaveHistory(entry);
+}
+
+function clearSaveHistory() {
+  if (!confirm('保存履歴をすべて削除しますか？')) return;
+  try {
+    localStorage.removeItem(SAVE_HISTORY_KEY);
+    showToast('保存履歴を削除しました');
+    if (document.getElementById('saveHistoryDialog')) renderSaveHistoryDialog();
+  } catch (e) {
+    showToast('削除に失敗しました', 'error');
+  }
+}
+
+function renderSaveHistoryDialog() {
+  const dialog = document.getElementById('saveHistoryDialog');
+  if (!dialog) return;
+  const history = loadSaveHistory();
+  const body = dialog.querySelector('.history-body');
+  if (history.length === 0) {
+    body.innerHTML = '<div style="padding:30px;text-align:center;color:#666;">保存履歴がまだありません</div>';
+    return;
+  }
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  html += '<thead><tr style="background:#1a4f8a;color:#fff;position:sticky;top:0;">';
+  html += '<th style="padding:8px;text-align:left;">日時</th>';
+  html += '<th style="padding:8px;text-align:center;">操作</th>';
+  html += '<th style="padding:8px;text-align:center;">対象月</th>';
+  html += '<th style="padding:8px;text-align:left;">内容</th>';
+  html += '<th style="padding:8px;text-align:center;">結果</th>';
+  html += '</tr></thead><tbody>';
+  history.forEach((h, idx) => {
+    const bg = idx % 2 === 0 ? '#fff' : '#f8fafc';
+    let statusStyle = 'color:#2e7d32;';
+    let statusLabel = '✓ 成功';
+    if (h.status === 'error') {
+      statusStyle = 'color:#c62828;';
+      statusLabel = '✗ 失敗';
+    } else if (h.status === 'partial') {
+      statusStyle = 'color:#f57c00;';
+      statusLabel = '⚠ 一部失敗';
+    }
+    html += '<tr style="background:' + bg + ';border-bottom:1px solid #e0e0e0;">';
+    html += '<td style="padding:6px 8px;white-space:nowrap;font-family:monospace;font-size:12px;">' + escapeHtml(h.timestamp) + '</td>';
+    html += '<td style="padding:6px 8px;text-align:center;font-weight:600;">' + escapeHtml(h.action) + '</td>';
+    html += '<td style="padding:6px 8px;text-align:center;">' + escapeHtml(h.targetMonth || '-') + '</td>';
+    html += '<td style="padding:6px 8px;">' + escapeHtml((h.scopes || []).join(' / ') || '-');
+    if (h.errorMsg) html += '<div style="color:#c62828;font-size:11px;margin-top:2px;">' + escapeHtml(h.errorMsg) + '</div>';
+    html += '</td>';
+    html += '<td style="padding:6px 8px;text-align:center;' + statusStyle + 'font-weight:600;white-space:nowrap;">' + statusLabel + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
+function showSaveHistoryDialog() {
+  let dialog = document.getElementById('saveHistoryDialog');
+  if (!dialog) {
+    // 初回作成
+    dialog = document.createElement('div');
+    dialog.id = 'saveHistoryDialog';
+    dialog.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;';
+    dialog.innerHTML = `
+      <div style="background:#fff;width:90%;max-width:900px;max-height:85vh;border-radius:12px;display:flex;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+        <div style="padding:16px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;background:#1a4f8a;color:#fff;border-radius:12px 12px 0 0;">
+          <h3 style="margin:0;font-size:18px;">📋 保存履歴 (最新${SAVE_HISTORY_MAX}件)</h3>
+          <button type="button" id="closeSaveHistoryBtn" style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.5);padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;">閉じる</button>
+        </div>
+        <div class="history-body" style="flex:1;overflow:auto;padding:0;"></div>
+        <div style="padding:12px 20px;border-top:1px solid #e0e0e0;display:flex;justify-content:flex-end;gap:8px;background:#f8fafc;border-radius:0 0 12px 12px;">
+          <button type="button" id="clearSaveHistoryBtn" style="background:#ffebee;color:#c62828;border:1px solid #c62828;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:600;">履歴を削除</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(dialog);
+    document.getElementById('closeSaveHistoryBtn').addEventListener('click', () => { dialog.style.display = 'none'; });
+    document.getElementById('clearSaveHistoryBtn').addEventListener('click', clearSaveHistory);
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.style.display = 'none'; });
+  }
+  renderSaveHistoryDialog();
+  dialog.style.display = 'flex';
+}
+
 // B-6: 元に戻す機能用のスナップショットスタック（最大10件）
 let undoStack = [];
 const UNDO_MAX = 10;
@@ -3014,6 +3138,9 @@ async function syncAll() {
     const detail = parts.length > 0 ? '（' + parts.join('、') + 'を更新）' : '（更新なし）';
     showToast('サーバーから最新データを取得しました' + detail);
 
+    // B-6: 保存履歴に記録（同期）
+    recordSaveLog('同期', parts, 'success', '');
+
     return true;
   } catch (e) {
     console.error('sync error:', e);
@@ -3028,6 +3155,8 @@ async function syncAll() {
       }, 3000);
     }
     showToast('同期エラー: ' + (e.message || e), 'error');
+    // B-6: 保存履歴に記録（同期エラー）
+    recordSaveLog('同期', [], 'error', e.message || String(e));
     return false;
   }
 }
@@ -6165,6 +6294,8 @@ function bindEvents() {
       setConnectionStatus(true);
       const scopeText = result.scopes.length > 0 ? result.scopes.join('・') : '（送信データなし）';
       showToast("保存しました（" + scopeText + "）");
+      // B-6: 保存履歴に記録
+      recordSaveLog('保存', result.scopes, 'success', '');
     } catch (e) {
       console.warn("サーバー送信失敗:", e);
       markClean();
@@ -6173,6 +6304,8 @@ function bindEvents() {
         "端末に保存しました。サーバー送信失敗：" + (e.message || 'ネットワークエラー') + "（後で同期してください）",
         "warn"
       );
+      // B-6: 保存履歴に記録（エラー）
+      recordSaveLog('保存', [], 'error', e.message || 'ネットワークエラー');
     } finally {
       btnSave.textContent = origText;
       btnSave.disabled = false;
@@ -6205,6 +6338,11 @@ function bindEvents() {
   if (btnUndo) {
     btnUndo.addEventListener("click", () => performUndo());
     updateUndoButton();  // 初期状態
+  }
+  // B-6: 保存履歴
+  const btnHistory = document.getElementById("btnHistory");
+  if (btnHistory) {
+    btnHistory.addEventListener("click", () => showSaveHistoryDialog());
   }
   document.getElementById("btnExcel").addEventListener("click", exportExcel);
   document.getElementById("btnYearExcel").addEventListener("click", exportYearExcel);
@@ -6342,6 +6480,8 @@ function clearAllTabs() {
   renderAll();
   markDirty();
   showToast("すべてのデータをクリアしました（保存ボタンでサーバーにも反映）");
+  // B-6: 保存履歴に記録
+  recordSaveLog('全クリア', ['水質週報', '機械設備', '電気設備', 'エアレーション', 'MLSS'], 'success', '');
 }
 
 // ===== 初期化 =====

@@ -3262,13 +3262,35 @@ if (typeof showToast === 'undefined') {
 }
 
 function loadFromStorage() {
+  // B-6: 月切替時、localStorage に該当月のデータがない場合は yoshiwaData をリセット
+  // (以前は raw が空だと前月のデータが残るバグがあった)
+  const currentMonth = yoshiwaData.targetMonth || "";
+  const currentStartDate = yoshiwaData.startDate || "";
   try {
     const raw = localStorage.getItem(storageKey());
     if (raw) {
       const parsed = JSON.parse(raw);
       yoshiwaData = Object.assign({ targetMonth: "", startDate: "", weeks: {}, mech: {}, elec: {} }, parsed);
+    } else {
+      // 該当月のlocalStorageがない場合は完全リセット（前月のデータ流出を防ぐ）
+      yoshiwaData = {
+        targetMonth: currentMonth,
+        startDate: currentStartDate,
+        weeks: {},
+        mech: {},
+        elec: {}
+      };
     }
-  } catch (e) {}
+  } catch (e) {
+    // パースエラーの場合も完全リセット
+    yoshiwaData = {
+      targetMonth: currentMonth,
+      startDate: currentStartDate,
+      weeks: {},
+      mech: {},
+      elec: {}
+    };
+  }
   ensureStructure();
 }
 
@@ -6210,8 +6232,11 @@ async function exportYearExcel() {
 
 // ===== イベントハンドラ =====
 function bindEvents() {
-  document.getElementById("targetMonth").addEventListener("change", (e) => {
+  document.getElementById("targetMonth").addEventListener("change", async (e) => {
+    // B-6: 月切替時、現在のフォーム値を「切替前の月」に保存しておく
     saveCurrentFormToData();
+    if (yoshiwaData.targetMonth) saveToStorage();  // 切替前の月をlocalStorageに確定保存
+
     const ym = e.target.value;
     yoshiwaData.targetMonth = ym;
     // startDate は互換のため更新するが UI では非表示
@@ -6220,7 +6245,7 @@ function bindEvents() {
       document.getElementById("startDate").value = auto;
       yoshiwaData.startDate = auto;
     }
-    loadFromStorage(); // 週報データ読込
+    loadFromStorage(); // 週報データ読込（B-6: ない場合はリセットされる）
     loadAnnualFromStorage(); // 年報データ読込
     recomputeMonthWeeks();
     // 月が変わって currentWeek/currentDay が範囲外になったら補正
@@ -6230,7 +6255,16 @@ function bindEvents() {
       for (let d = 1; d <= 5; d++) if (ws0[d]) { currentDay = d; break; }
     }
     renderAll();
-    markDirty();
+    markClean();  // B-6: 月切替直後はdirtyではない（古い月のサーバーへ誤送信防止）
+
+    // B-6: 自動的にサーバーから新月のデータを取得（古いデータの混入を防ぐ）
+    if (typeof syncAll === 'function') {
+      try {
+        await syncAll();
+      } catch (e) {
+        console.warn('月切替時の自動同期に失敗:', e);
+      }
+    }
   });
 
   document.querySelectorAll("#mainTabs button").forEach(btn => {

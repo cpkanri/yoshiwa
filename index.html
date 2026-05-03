@@ -2885,49 +2885,88 @@ async function uploadAllTabs() {
     results.scopes.push('電気設備');
   }
 
-  // 4. エアレーション
+  // 4. エアレーション（中身が空ならスキップ）
   const aerationKey = 'yoshiwa_aeration_' + month;
   const aerationRaw = localStorage.getItem(aerationKey);
   if (aerationRaw) {
     try {
       const aerationData = JSON.parse(aerationRaw);
-      const res = await fetchWithTimeout(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(withTokenBody({
-          action: 'saveAeration',
-          month: month,
-          aeration: aerationData
-        }))
-      }, 20000);
-      const data = await res.json();
-      if (data.error) throw new Error('エアレーション: ' + data.error);
-      results.saved += (data.saved || 0);
-      results.scopes.push('エアレーション');
+      // days オブジェクト内に1つでも実値があるかチェック（{ days: {} } や全 null はスキップ）
+      const aerationDays = (aerationData && aerationData.days) || {};
+      let hasAerationData = false;
+      for (const dk in aerationDays) {
+        const day = aerationDays[dk];
+        if (day && typeof day === 'object') {
+          for (const k in day) {
+            if (day[k] !== null && day[k] !== undefined && day[k] !== '') {
+              hasAerationData = true; break;
+            }
+          }
+        } else if (day !== null && day !== undefined && day !== '') {
+          hasAerationData = true;
+        }
+        if (hasAerationData) break;
+      }
+      if (hasAerationData) {
+        const res = await fetchWithTimeout(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(withTokenBody({
+            action: 'saveAeration',
+            month: month,
+            aeration: aerationData
+          }))
+        }, 20000);
+        const data = await res.json();
+        if (data.error) throw new Error('エアレーション: ' + data.error);
+        results.saved += (data.saved || 0);
+        results.scopes.push('エアレーション');
+      }
     } catch(e) {
       if (e.message && e.message.indexOf('エアレーション') === 0) throw e;
     }
   }
 
-  // 5. 返送汚泥MLSS
+  // 5. 返送汚泥MLSS（中身が空ならスキップ）
   const mlssKey = 'yoshiwa_mlss_return_' + month;
   const mlssRaw = localStorage.getItem(mlssKey);
   if (mlssRaw) {
     try {
       const mlssData = JSON.parse(mlssRaw);
-      const res = await fetchWithTimeout(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(withTokenBody({
-          action: 'saveMlssReturn',
-          month: month,
-          mlss_return: mlssData
-        }))
-      }, 20000);
-      const data = await res.json();
-      if (data.error) throw new Error('返送汚泥MLSS: ' + data.error);
-      results.saved += (data.saved || 0);
-      results.scopes.push('返送汚泥MLSS');
+      // weeks > week > day の全ての値が null/空ならスキップ
+      const mlssWeeks = (mlssData && mlssData.weeks) || {};
+      let hasMlssData = false;
+      for (const w in mlssWeeks) {
+        const week = mlssWeeks[w];
+        if (!week) continue;
+        for (const d in week) {
+          const day = week[d];
+          if (day && typeof day === 'object') {
+            for (const k in day) {
+              if (day[k] !== null && day[k] !== undefined && day[k] !== '') {
+                hasMlssData = true; break;
+              }
+            }
+          }
+          if (hasMlssData) break;
+        }
+        if (hasMlssData) break;
+      }
+      if (hasMlssData) {
+        const res = await fetchWithTimeout(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(withTokenBody({
+            action: 'saveMlssReturn',
+            month: month,
+            mlss_return: mlssData
+          }))
+        }, 20000);
+        const data = await res.json();
+        if (data.error) throw new Error('返送汚泥MLSS: ' + data.error);
+        results.saved += (data.saved || 0);
+        results.scopes.push('返送汚泥MLSS');
+      }
     } catch(e) {
       if (e.message && e.message.indexOf('返送汚泥') === 0) throw e;
     }

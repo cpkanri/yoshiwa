@@ -2804,85 +2804,66 @@ async function uploadToServer() {
   return results;
 }
 
-// B-6 追加: 全タブ全データを一括でサーバーに送信（保存ボタンの新動作）
+// 全タブ全データを一括でサーバーに送信（保存ボタンの新動作）
+// 各タブは Promise.allSettled で並列に POST して合計時間を短縮
 async function uploadAllTabs() {
   const month = yoshiwaData.targetMonth;
   if (!month) throw new Error('対象年月が未設定です');
 
   const results = { saved: 0, scopes: [] };
+  const tasks = [];  // [{ scope, body, timeout }]
 
-  // 1. 水質週報（全週まとめて）
+  // 1. 水質週報（全週まとめて、実値があればタスク化）
   if (yoshiwaData.weeks && Object.keys(yoshiwaData.weeks).length > 0) {
     let hasWaterData = false;
     for (const w in yoshiwaData.weeks) {
       const weekData = yoshiwaData.weeks[w];
-      if (weekData) {
-        for (const d in weekData) {
-          const day = weekData[d];
-          if (day && typeof day === 'object') {
-            for (const k in day) {
-              if (day[k] !== null && day[k] !== undefined && day[k] !== '') {
-                hasWaterData = true; break;
-              }
+      if (!weekData) continue;
+      for (const d in weekData) {
+        const day = weekData[d];
+        if (day && typeof day === 'object') {
+          for (const k in day) {
+            if (day[k] !== null && day[k] !== undefined && day[k] !== '') {
+              hasWaterData = true; break;
             }
-            if (hasWaterData) break;
           }
+          if (hasWaterData) break;
         }
-        if (hasWaterData) break;
       }
+      if (hasWaterData) break;
     }
     if (hasWaterData) {
-      const res = await fetchWithTimeout(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(withTokenBody({
+      tasks.push({
+        scope: '水質週報',
+        timeout: 30000,
+        body: withTokenBody({
           action: 'saveAll',
           month: month,
           startDate: yoshiwaData.startDate || '',
           weeks: yoshiwaData.weeks
-        }))
-      }, 30000);
-      const data = await res.json();
-      if (data.error) throw new Error('水質週報: ' + data.error);
-      results.saved += (data.saved || 0);
-      results.scopes.push('水質週報');
+        })
+      });
     }
   }
 
-  // 2. 機械設備（全週まとめて1回POST。GAS側で週ごとに別行へsetValueされる）
+  // 2. 機械設備（全週まとめて1回POST、GAS側で週ごとに別行へsetValue）
   const mechData = yoshiwaData.mech || {};
   if (hasAnyEquipData(mechData)) {
-    const res = await fetchWithTimeout(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(withTokenBody({
-        action: 'saveMech',
-        month: month,
-        mech: mechData
-      }))
-    }, 30000);
-    const data = await res.json();
-    if (data.error) throw new Error('機械設備: ' + data.error);
-    results.saved += (data.saved || 0);
-    results.scopes.push('機械設備');
+    tasks.push({
+      scope: '機械設備',
+      timeout: 30000,
+      body: withTokenBody({ action: 'saveMech', month: month, mech: mechData })
+    });
   }
 
-  // 3. 電気設備（全週まとめて1回POST。GAS側で週ごとに別行へsetValueされる）
+  // 3. 電気設備（同上）
   const elecData = yoshiwaData.elec || {};
   if (hasAnyEquipData(elecData)) {
-    const res = await fetchWithTimeout(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(withTokenBody({
-        action: 'saveElec',
-        month: month,
-        elec: elecData
-      }))
-    }, 30000);
-    const data = await res.json();
-    if (data.error) throw new Error('電気設備: ' + data.error);
-    results.saved += (data.saved || 0);
-    results.scopes.push('電気設備');
+    tasks.push({
+      scope: '電気設備',
+      timeout: 30000,
+      body: withTokenBody({ action: 'saveElec', month: month, elec: elecData })
+    });
   }
 
   // 4. エアレーション（中身が空ならスキップ）
@@ -2891,7 +2872,6 @@ async function uploadAllTabs() {
   if (aerationRaw) {
     try {
       const aerationData = JSON.parse(aerationRaw);
-      // days オブジェクト内に1つでも実値があるかチェック（{ days: {} } や全 null はスキップ）
       const aerationDays = (aerationData && aerationData.days) || {};
       let hasAerationData = false;
       for (const dk in aerationDays) {
@@ -2908,23 +2888,13 @@ async function uploadAllTabs() {
         if (hasAerationData) break;
       }
       if (hasAerationData) {
-        const res = await fetchWithTimeout(GAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify(withTokenBody({
-            action: 'saveAeration',
-            month: month,
-            aeration: aerationData
-          }))
-        }, 20000);
-        const data = await res.json();
-        if (data.error) throw new Error('エアレーション: ' + data.error);
-        results.saved += (data.saved || 0);
-        results.scopes.push('エアレーション');
+        tasks.push({
+          scope: 'エアレーション',
+          timeout: 20000,
+          body: withTokenBody({ action: 'saveAeration', month: month, aeration: aerationData })
+        });
       }
-    } catch(e) {
-      if (e.message && e.message.indexOf('エアレーション') === 0) throw e;
-    }
+    } catch(_) { /* JSONパース失敗は無視（既存挙動と同じ） */ }
   }
 
   // 5. 返送汚泥MLSS（中身が空ならスキップ）
@@ -2933,7 +2903,6 @@ async function uploadAllTabs() {
   if (mlssRaw) {
     try {
       const mlssData = JSON.parse(mlssRaw);
-      // weeks > week > day の全ての値が null/空ならスキップ
       const mlssWeeks = (mlssData && mlssData.weeks) || {};
       let hasMlssData = false;
       for (const w in mlssWeeks) {
@@ -2953,23 +2922,53 @@ async function uploadAllTabs() {
         if (hasMlssData) break;
       }
       if (hasMlssData) {
-        const res = await fetchWithTimeout(GAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify(withTokenBody({
-            action: 'saveMlssReturn',
-            month: month,
-            mlss_return: mlssData
-          }))
-        }, 20000);
-        const data = await res.json();
-        if (data.error) throw new Error('返送汚泥MLSS: ' + data.error);
-        results.saved += (data.saved || 0);
-        results.scopes.push('返送汚泥MLSS');
+        tasks.push({
+          scope: '返送汚泥MLSS',
+          timeout: 20000,
+          body: withTokenBody({ action: 'saveMlssReturn', month: month, mlss_return: mlssData })
+        });
       }
-    } catch(e) {
-      if (e.message && e.message.indexOf('返送汚泥') === 0) throw e;
+    } catch(_) { /* JSONパース失敗は無視 */ }
+  }
+
+  if (tasks.length === 0) return results;
+
+  // 並列実行（書き込み先シートが別なので競合しない）
+  const settled = await Promise.allSettled(
+    tasks.map(t => fetchWithTimeout(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(t.body)
+    }, t.timeout).then(res => res.json()))
+  );
+
+  // 結果集計：成功は results に積み、失敗は errors に集約
+  const errors = [];
+  settled.forEach((r, i) => {
+    const scope = tasks[i].scope;
+    if (r.status === 'fulfilled') {
+      const data = r.value;
+      if (data && data.error) {
+        errors.push(scope + ': ' + data.error);
+      } else {
+        results.saved += (data && data.saved) || 0;
+        results.scopes.push(scope);
+      }
+    } else {
+      const reason = r.reason;
+      const msg = (reason && reason.message) || String(reason) || 'unknown';
+      errors.push(scope + ': ' + msg);
     }
+  });
+
+  if (errors.length > 0) {
+    // 部分成功も含めてユーザーに分かるようメッセージを構築
+    const successText = results.scopes.length > 0
+      ? '保存成功(' + results.scopes.join('・') + ') / '
+      : '';
+    const err = new Error(successText + '失敗(' + errors.join(', ') + ')');
+    err.partialResults = results;  // 呼び出し側が成功分を参照したい場合用
+    throw err;
   }
 
   return results;

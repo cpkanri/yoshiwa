@@ -2847,40 +2847,54 @@ async function uploadAllTabs() {
     }
   }
 
-  // 2. 機械設備
+  // 2. 機械設備（週単位で5回POST、セル50,000文字制限対策）
   const mechData = yoshiwaData.mech || {};
   if (hasAnyEquipData(mechData)) {
-    const res = await fetchWithTimeout(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(withTokenBody({
-        action: 'saveMech',
-        month: month,
-        mech: mechData
-      }))
-    }, 30000);
-    const data = await res.json();
-    if (data.error) throw new Error('機械設備: ' + data.error);
-    results.saved += (data.saved || 0);
-    results.scopes.push('機械設備');
+    let mechSentAny = false;
+    for (const w of Object.keys(mechData)) {
+      const weekData = mechData[w];
+      if (!weekData || !hasAnyEquipDayData(weekData)) continue;
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(withTokenBody({
+          action: 'saveMech',
+          month: month,
+          week: w,
+          mechWeek: weekData
+        }))
+      }, 30000);
+      const data = await res.json();
+      if (data.error) throw new Error('機械設備 第' + w + '週: ' + data.error);
+      results.saved += (data.saved || 0);
+      mechSentAny = true;
+    }
+    if (mechSentAny) results.scopes.push('機械設備');
   }
 
-  // 3. 電気設備
+  // 3. 電気設備（週単位で5回POST、セル50,000文字制限対策）
   const elecData = yoshiwaData.elec || {};
   if (hasAnyEquipData(elecData)) {
-    const res = await fetchWithTimeout(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(withTokenBody({
-        action: 'saveElec',
-        month: month,
-        elec: elecData
-      }))
-    }, 30000);
-    const data = await res.json();
-    if (data.error) throw new Error('電気設備: ' + data.error);
-    results.saved += (data.saved || 0);
-    results.scopes.push('電気設備');
+    let elecSentAny = false;
+    for (const w of Object.keys(elecData)) {
+      const weekData = elecData[w];
+      if (!weekData || !hasAnyEquipDayData(weekData)) continue;
+      const res = await fetchWithTimeout(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(withTokenBody({
+          action: 'saveElec',
+          month: month,
+          week: w,
+          elecWeek: weekData
+        }))
+      }, 30000);
+      const data = await res.json();
+      if (data.error) throw new Error('電気設備 第' + w + '週: ' + data.error);
+      results.saved += (data.saved || 0);
+      elecSentAny = true;
+    }
+    if (elecSentAny) results.scopes.push('電気設備');
   }
 
   // 4. エアレーション
@@ -3015,44 +3029,54 @@ async function uploadCurrentOnly() {
       }
     }
   } else if (currentMain === 'mech') {
-    // B-4 追加: 機械設備（月単位、全週まとめて送信）
+    // 機械設備（週単位で5回POST、セル50,000文字制限対策）
     results.scope = '機械設備 第' + currentMechWeek + '週';
     const mechData = yoshiwaData.mech || {};
     // B-5 修正: ensureMechElecStructure 後は常にキー5個あるため、実値の有無で判定
     if (hasAnyEquipData(mechData)) {
-      const res = await fetchWithTimeout(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(withTokenBody({
-          action: 'saveMech',
-          month: month,
-          mech: mechData
-        }))
-      }, 15000);
-      const data = await res.json();
-      if (data.error) throw new Error('機械設備: ' + data.error);
-      results.saved += (data.saved || 0);
+      for (const w of Object.keys(mechData)) {
+        const weekData = mechData[w];
+        if (!weekData || !hasAnyEquipDayData(weekData)) continue;
+        const res = await fetchWithTimeout(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(withTokenBody({
+            action: 'saveMech',
+            month: month,
+            week: w,
+            mechWeek: weekData
+          }))
+        }, 15000);
+        const data = await res.json();
+        if (data.error) throw new Error('機械設備 第' + w + '週: ' + data.error);
+        results.saved += (data.saved || 0);
+      }
     } else {
       // 実値がない場合はサーバー送信をスキップ（既存サーバーデータの上書き保護）
       console.log('[B-5] mech: 実値なし、サーバー送信スキップ');
     }
   } else if (currentMain === 'elec') {
-    // B-4 追加: 電気設備（月単位、全週まとめて送信）
+    // 電気設備（週単位で5回POST、セル50,000文字制限対策）
     results.scope = '電気設備 第' + currentElecWeek + '週';
     const elecData = yoshiwaData.elec || {};
     if (hasAnyEquipData(elecData)) {
-      const res = await fetchWithTimeout(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(withTokenBody({
-          action: 'saveElec',
-          month: month,
-          elec: elecData
-        }))
-      }, 15000);
-      const data = await res.json();
-      if (data.error) throw new Error('電気設備: ' + data.error);
-      results.saved += (data.saved || 0);
+      for (const w of Object.keys(elecData)) {
+        const weekData = elecData[w];
+        if (!weekData || !hasAnyEquipDayData(weekData)) continue;
+        const res = await fetchWithTimeout(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(withTokenBody({
+            action: 'saveElec',
+            month: month,
+            week: w,
+            elecWeek: weekData
+          }))
+        }, 15000);
+        const data = await res.json();
+        if (data.error) throw new Error('電気設備 第' + w + '週: ' + data.error);
+        results.saved += (data.saved || 0);
+      }
     } else {
       console.log('[B-5] elec: 実値なし、サーバー送信スキップ');
     }

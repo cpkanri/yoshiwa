@@ -985,6 +985,31 @@ body.login-active { overflow: hidden; }
   background: #90caf9;
 }
 
+/* 列ヘッダーの「クリア」ボタン（破壊的操作のためピンク系） */
+.equip-table thead th .col-clear-btn {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  padding: 2px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid #ffcdd2;
+  border-radius: 3px;
+  background: #ffebee;
+  color: #c62828;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.equip-table thead th .col-clear-btn:hover {
+  background: #ffcdd2;
+  border-color: #ef9a9a;
+}
+.equip-table thead th .col-clear-btn:active {
+  background: #ef9a9a;
+}
+
 .holiday-substitute-wrap {
   margin: 0 12px 8px;
 }
@@ -3862,6 +3887,7 @@ function buildEquipTableHead() {
             `<span class="col-date" data-hday="${dk}"></span>` +
             `<span class="col-marker" data-mday="${dk}"></span>` +
             `<button type="button" class="col-copy-btn" data-copyday="${dk}" title="前日のデータをコピー">↩前日</button>` +
+            `<button type="button" class="col-clear-btn" data-clearday="${dk}" title="この曜日のデータをクリア">×クリア</button>` +
             `</th>`;
   });
   return html;
@@ -4328,6 +4354,48 @@ function copyPrevDayData(kind, targetDk) {
   showToast(`${srcMd} のデータを ${dstMd} にコピーしました`);
 }
 
+// 指定曜日のデータをクリア（機械/電気共通）
+function clearDayData(kind, targetDk) {
+  const weekIdx = (kind === "mech") ? currentMechWeek : currentElecWeek;
+  const week = (kind === "mech") ? yoshiwaData.mech[weekIdx] : yoshiwaData.elec[weekIdx];
+  if (!week || !week.days || !week.days[targetDk]) {
+    showToast("対象の日が無効です", "error");
+    return;
+  }
+  const activeDays = getActiveDays(week, weekIdx);
+  if (activeDays.indexOf(targetDk) < 0) {
+    showToast("非活性日のデータはありません");
+    return;
+  }
+  const date = getDateForDayKey(weekIdx, targetDk);
+  if (!date) {
+    showToast("月外の日です");
+    return;
+  }
+  const day = week.days[targetDk];
+  let hasData = false;
+  for (const k in day) {
+    if (day[k] !== null && day[k] !== undefined && day[k] !== "") { hasData = true; break; }
+  }
+  if (!hasData) {
+    showToast("データはありません");
+    return;
+  }
+  const dayLabelMap = { mon: "月", tue: "火", wed: "水", thu: "木", fri: "金" };
+  const kindLabel = (kind === "mech") ? "機械設備" : "電気設備";
+  const dkLabel = dayLabelMap[targetDk] || targetDk;
+  if (!confirm(kindLabel + " 第" + weekIdx + "週 " + dkLabel + "曜日のデータをクリアしますか？")) return;
+  pushUndo("クリア（" + kind + " 第" + weekIdx + "週 " + targetDk + "）");
+  Object.keys(day).forEach(k => { day[k] = null; });
+  if (kind === "mech") {
+    loadMechDataToForm();
+  } else {
+    loadElecDataToForm();
+  }
+  markDirty();
+  showToast(kindLabel + " 第" + weekIdx + "週 " + dkLabel + "曜日をクリアしました");
+}
+
 function bindEquipInputEvents(kind) {
   const dataAttr = (kind === "mech") ? "mfield" : "efield";
   const containerId = (kind === "mech") ? "mechBody" : "elecBody";
@@ -4394,11 +4462,20 @@ function bindEquipInputEvents(kind) {
   // B-6 追加: 列ヘッダーの「↩前日」コピーボタン (イベント委譲)
   if (head) {
     const onHeadClick = function(ev) {
-      const btn = ev.target.closest('button.col-copy-btn');
-      if (!btn) return;
-      const targetDk = btn.dataset.copyday;
-      if (!targetDk) return;
-      copyPrevDayData(kind, targetDk);
+      const copyBtn = ev.target.closest('button.col-copy-btn');
+      if (copyBtn) {
+        const targetDk = copyBtn.dataset.copyday;
+        if (!targetDk) return;
+        copyPrevDayData(kind, targetDk);
+        return;
+      }
+      const clearBtn = ev.target.closest('button.col-clear-btn');
+      if (clearBtn) {
+        const targetDk = clearBtn.dataset.clearday;
+        if (!targetDk) return;
+        clearDayData(kind, targetDk);
+        return;
+      }
     };
     head.addEventListener("click", onHeadClick);
     head[handlerKey] = { click: onHeadClick };
@@ -6455,34 +6532,44 @@ function clearCurrentAnnual() {
   showToast("クリアしました");
 }
 
-// B-6: 機械設備の現在の日のみをクリア
+// 機械設備: 現在週の全曜日をクリア（活性日かつ月内のみ）
 function clearCurrentMech() {
   const w = currentMechWeek;
-  const dayKey = DAY_NUM_TO_STR[currentDay] || "mon";
-  if (!confirm("機械設備 第" + w + "週 " + dayKey + "曜日のデータをクリアしますか？")) return;
-  if (!yoshiwaData.mech || !yoshiwaData.mech[w] || !yoshiwaData.mech[w].days || !yoshiwaData.mech[w].days[dayKey]) return;
-  pushUndo("クリア（機械設備 第" + w + "週 " + dayKey + "）");
-  Object.keys(yoshiwaData.mech[w].days[dayKey]).forEach(k => {
-    yoshiwaData.mech[w].days[dayKey][k] = null;
+  if (!confirm("機械設備 第" + w + "週の全曜日のデータをクリアしますか？")) return;
+  const week = yoshiwaData.mech && yoshiwaData.mech[w];
+  if (!week || !week.days) return;
+  const activeDays = getActiveDays(week, w);
+  pushUndo("クリア（機械設備 第" + w + "週 全曜日）");
+  EQUIP_DAYS.forEach(dk => {
+    if (activeDays.indexOf(dk) < 0) return;
+    if (!getDateForDayKey(w, dk)) return;
+    const day = week.days[dk];
+    if (!day) return;
+    Object.keys(day).forEach(k => { day[k] = null; });
   });
-  renderAll();
+  loadMechDataToForm();
   markDirty();
-  showToast("機械設備 第" + w + "週 " + dayKey + "曜日をクリアしました");
+  showToast("機械設備 第" + w + "週の全データをクリアしました");
 }
 
-// B-6: 電気設備の現在の日のみをクリア
+// 電気設備: 現在週の全曜日をクリア（活性日かつ月内のみ）
 function clearCurrentElec() {
   const w = currentElecWeek;
-  const dayKey = DAY_NUM_TO_STR[currentDay] || "tue";
-  if (!confirm("電気設備 第" + w + "週 " + dayKey + "曜日のデータをクリアしますか？")) return;
-  if (!yoshiwaData.elec || !yoshiwaData.elec[w] || !yoshiwaData.elec[w].days || !yoshiwaData.elec[w].days[dayKey]) return;
-  pushUndo("クリア（電気設備 第" + w + "週 " + dayKey + "）");
-  Object.keys(yoshiwaData.elec[w].days[dayKey]).forEach(k => {
-    yoshiwaData.elec[w].days[dayKey][k] = null;
+  if (!confirm("電気設備 第" + w + "週の全曜日のデータをクリアしますか？")) return;
+  const week = yoshiwaData.elec && yoshiwaData.elec[w];
+  if (!week || !week.days) return;
+  const activeDays = getActiveDays(week, w);
+  pushUndo("クリア（電気設備 第" + w + "週 全曜日）");
+  EQUIP_DAYS.forEach(dk => {
+    if (activeDays.indexOf(dk) < 0) return;
+    if (!getDateForDayKey(w, dk)) return;
+    const day = week.days[dk];
+    if (!day) return;
+    Object.keys(day).forEach(k => { day[k] = null; });
   });
-  renderAll();
+  loadElecDataToForm();
   markDirty();
-  showToast("電気設備 第" + w + "週 " + dayKey + "曜日をクリアしました");
+  showToast("電気設備 第" + w + "週の全データをクリアしました");
 }
 
 // B-6 追加: 全タブの全データを一括クリア

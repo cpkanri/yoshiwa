@@ -2849,56 +2849,40 @@ async function uploadAllTabs() {
     }
   }
 
-  // 2. 機械設備（週単位で5回POST、セル50,000文字制限対策）
+  // 2. 機械設備（全週まとめて1回POST。GAS側で週ごとに別行へsetValueされる）
   const mechData = yoshiwaData.mech || {};
   if (hasAnyEquipData(mechData)) {
-    let mechSentAny = false;
-    const mechWeeksWithData = Object.keys(mechData).filter(w => hasAnyEquipDayData(mechData[w]));
-    console.log('[uploadAllTabs] 機械設備 送信対象週:', mechWeeksWithData);
-    for (const w of mechWeeksWithData) {
-      const weekData = mechData[w];
-      const res = await fetchWithTimeout(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(withTokenBody({
-          action: 'saveMech',
-          month: month,
-          week: w,
-          mechWeek: weekData
-        }))
-      }, 30000);
-      const data = await res.json();
-      if (data.error) throw new Error('機械設備 第' + w + '週: ' + data.error);
-      results.saved += (data.saved || 0);
-      mechSentAny = true;
-    }
-    if (mechSentAny) results.scopes.push('機械設備');
+    const res = await fetchWithTimeout(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(withTokenBody({
+        action: 'saveMech',
+        month: month,
+        mech: mechData
+      }))
+    }, 30000);
+    const data = await res.json();
+    if (data.error) throw new Error('機械設備: ' + data.error);
+    results.saved += (data.saved || 0);
+    results.scopes.push('機械設備');
   }
 
-  // 3. 電気設備（週単位で5回POST、セル50,000文字制限対策）
+  // 3. 電気設備（全週まとめて1回POST。GAS側で週ごとに別行へsetValueされる）
   const elecData = yoshiwaData.elec || {};
   if (hasAnyEquipData(elecData)) {
-    let elecSentAny = false;
-    const elecWeeksWithData = Object.keys(elecData).filter(w => hasAnyEquipDayData(elecData[w]));
-    console.log('[uploadAllTabs] 電気設備 送信対象週:', elecWeeksWithData);
-    for (const w of elecWeeksWithData) {
-      const weekData = elecData[w];
-      const res = await fetchWithTimeout(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(withTokenBody({
-          action: 'saveElec',
-          month: month,
-          week: w,
-          elecWeek: weekData
-        }))
-      }, 30000);
-      const data = await res.json();
-      if (data.error) throw new Error('電気設備 第' + w + '週: ' + data.error);
-      results.saved += (data.saved || 0);
-      elecSentAny = true;
-    }
-    if (elecSentAny) results.scopes.push('電気設備');
+    const res = await fetchWithTimeout(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(withTokenBody({
+        action: 'saveElec',
+        month: month,
+        elec: elecData
+      }))
+    }, 30000);
+    const data = await res.json();
+    if (data.error) throw new Error('電気設備: ' + data.error);
+    results.saved += (data.saved || 0);
+    results.scopes.push('電気設備');
   }
 
   // 4. エアレーション

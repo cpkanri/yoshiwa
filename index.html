@@ -2684,7 +2684,9 @@ const WEEKDAY_JP = ["日","月","火","水","木","金","土"];
 function saveToStorage() {
   try {
     saveCurrentFormToData();
-    yoshiwaData.targetMonth = document.getElementById("targetMonth").value || yoshiwaData.targetMonth;
+    // Note: targetMonth は yoshiwaData の現在値を信頼する（DOM入力値からは読まない）
+    // change イベントで月切替する際、SELECT は既に新月に変わっているため
+    // ここで読むと古い月のデータを新月のキーで保存してしまう
     yoshiwaData.startDate = document.getElementById("startDate").value || yoshiwaData.startDate;
     const mainRes = safeSetItem(storageKey(), JSON.stringify(yoshiwaData));
     if (!mainRes.ok) { handleStorageSaveFailure(mainRes); return false; }
@@ -6411,12 +6413,16 @@ function bindEvents() {
   // ===== B-1 追加: 機械設備のイベント =====
   document.querySelectorAll("#mechWeekTabs button").forEach(btn => {
     btn.addEventListener("click", () => {
+      // 週切替前に現在のフォーム値を yoshiwaData.mech[currentMechWeek] へ確定
+      // （これがないと表示中以外の週のデータが yoshiwaData に書き込まれず、保存時に消える）
+      saveCurrentFormToData();
       currentMechWeek = Number(btn.dataset.mweek);
       renderMechPanel();
     });
   });
   document.querySelectorAll("#mechPartTabs button").forEach(btn => {
     btn.addEventListener("click", () => {
+      saveCurrentFormToData();
       currentMechPart = Number(btn.dataset.mpart);
       renderMechPanel();
     });
@@ -6440,12 +6446,15 @@ function bindEvents() {
   // ===== B-1 追加: 電気設備のイベント =====
   document.querySelectorAll("#elecWeekTabs button").forEach(btn => {
     btn.addEventListener("click", () => {
+      // 週切替前に現在のフォーム値を yoshiwaData.elec[currentElecWeek] へ確定
+      saveCurrentFormToData();
       currentElecWeek = Number(btn.dataset.eweek);
       renderElecPanel();
     });
   });
   document.querySelectorAll("#elecPartTabs button").forEach(btn => {
     btn.addEventListener("click", () => {
+      saveCurrentFormToData();
       currentElecPart = Number(btn.dataset.epart);
       renderElecPanel();
     });

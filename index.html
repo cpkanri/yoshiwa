@@ -2853,9 +2853,10 @@ async function uploadAllTabs() {
   const mechData = yoshiwaData.mech || {};
   if (hasAnyEquipData(mechData)) {
     let mechSentAny = false;
-    for (const w of Object.keys(mechData)) {
+    const mechWeeksWithData = Object.keys(mechData).filter(w => hasAnyEquipDayData(mechData[w]));
+    console.log('[uploadAllTabs] 機械設備 送信対象週:', mechWeeksWithData);
+    for (const w of mechWeeksWithData) {
       const weekData = mechData[w];
-      if (!weekData || !hasAnyEquipDayData(weekData)) continue;
       const res = await fetchWithTimeout(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
@@ -2878,9 +2879,10 @@ async function uploadAllTabs() {
   const elecData = yoshiwaData.elec || {};
   if (hasAnyEquipData(elecData)) {
     let elecSentAny = false;
-    for (const w of Object.keys(elecData)) {
+    const elecWeeksWithData = Object.keys(elecData).filter(w => hasAnyEquipDayData(elecData[w]));
+    console.log('[uploadAllTabs] 電気設備 送信対象週:', elecWeeksWithData);
+    for (const w of elecWeeksWithData) {
       const weekData = elecData[w];
-      if (!weekData || !hasAnyEquipDayData(weekData)) continue;
       const res = await fetchWithTimeout(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
@@ -3327,34 +3329,38 @@ if (typeof showToast === 'undefined') {
 }
 
 function loadFromStorage() {
-  // B-6: 月切替時、localStorage に該当月のデータがない場合は yoshiwaData をリセット
+  // 月切替時、localStorage に該当月のデータがない場合は yoshiwaData をリセット
   // (以前は raw が空だと前月のデータが残るバグがあった)
   const currentMonth = yoshiwaData.targetMonth || "";
   const currentStartDate = yoshiwaData.startDate || "";
+  const emptyShape = () => ({
+    targetMonth: currentMonth,
+    startDate: currentStartDate,
+    weeks: {},
+    mech: {},
+    elec: {}
+  });
   try {
     const raw = localStorage.getItem(storageKey());
     if (raw) {
       const parsed = JSON.parse(raw);
-      yoshiwaData = Object.assign({ targetMonth: "", startDate: "", weeks: {}, mech: {}, elec: {} }, parsed);
+      // 旧バグで「他の月のデータが今月のキーで保存されている」破損を検出
+      // parsed.targetMonth が currentMonth と食い違うなら破損データとして破棄
+      if (parsed && parsed.targetMonth && currentMonth && parsed.targetMonth !== currentMonth) {
+        console.warn('[loadFromStorage] 破損データ検出: key=' + storageKey() +
+                     ' parsed.targetMonth=' + parsed.targetMonth +
+                     ' (current=' + currentMonth + ') → 破棄してリセット');
+        try { localStorage.removeItem(storageKey()); } catch(_) {}
+        yoshiwaData = emptyShape();
+      } else {
+        yoshiwaData = Object.assign(emptyShape(), parsed);
+      }
     } else {
       // 該当月のlocalStorageがない場合は完全リセット（前月のデータ流出を防ぐ）
-      yoshiwaData = {
-        targetMonth: currentMonth,
-        startDate: currentStartDate,
-        weeks: {},
-        mech: {},
-        elec: {}
-      };
+      yoshiwaData = emptyShape();
     }
   } catch (e) {
-    // パースエラーの場合も完全リセット
-    yoshiwaData = {
-      targetMonth: currentMonth,
-      startDate: currentStartDate,
-      weeks: {},
-      mech: {},
-      elec: {}
-    };
+    yoshiwaData = emptyShape();
   }
   ensureStructure();
 }
@@ -6362,7 +6368,18 @@ function bindEvents() {
       document.getElementById("startDate").value = auto;
       yoshiwaData.startDate = auto;
     }
-    loadFromStorage(); // 週報データ読込（B-6: ない場合はリセットされる）
+    // 月切替時は yoshiwaData の各タブを完全クリア
+    // （loadFromStorage が新月の localStorage を持っていなくても、また破損データを
+    //   検出し損ねた場合でも、旧月のフォーム値が新月の DOM に残らないようにする）
+    yoshiwaData.weeks = {};
+    yoshiwaData.mech = {};
+    yoshiwaData.elec = {};
+    // 機械・電気の現在週も先頭にリセット（範囲外参照防止）
+    currentMechWeek = 1;
+    currentMechPart = 1;
+    currentElecWeek = 1;
+    currentElecPart = 1;
+    loadFromStorage(); // 週報データ読込（ない場合はリセット済みのまま）
     loadAnnualFromStorage(); // 年報データ読込
     recomputeMonthWeeks();
     // 月が変わって currentWeek/currentDay が範囲外になったら補正
